@@ -1,0 +1,18 @@
+run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,violations,violation_rate,errors,error_rate,extra
+2026-09-11T07:02:17+00:00,ryw,smoke,natural,ONE,ONE,-,40,40,37,0.9250,0,0.0000,read_none=37 read_stale=0 w_node=1 r_node=2
+2026-09-11T07:03:06+00:00,ryw,smoke,natural,ONE,QUORUM,-,40,40,10,0.2500,0,0.0000,read_none=10 read_stale=0 w_node=1 r_node=2
+2026-09-11T07:03:39+00:00,ryw,smoke,natural,QUORUM,QUORUM,-,40,40,0,0.0000,0,0.0000,read_none=0 read_stale=0 w_node=1 r_node=2
+2026-09-11T07:03:59+00:00,ryw,smoke,natural,ALL,ONE,-,40,40,0,0.0000,0,0.0000,read_none=0 read_stale=0 w_node=1 r_node=2
+2026-09-11T07:04:46+00:00,mr,smoke,natural,ONE,ONE,-,40,40,38,0.9500,0,0.0000,seed_cl=ALL back_to_none=0 back_to_older=38 path=node1->node2
+2026-09-11T07:05:52+00:00,mr,smoke,natural,QUORUM,QUORUM,-,40,40,0,0.0000,0,0.0000,seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
+2026-09-11T07:06:44+00:00,mw,smoke,natural,ONE,ONE,ALL,40,40,0,0.0000,0,0.0000,W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
+2026-09-11T07:07:21+00:00,mw,smoke,skew,ONE,ONE,ALL,40,40,40,1.0000,0,0.0000,W1_wins=40 neither_visible=0 skew_us=500000 path=node2->node3
+2026-09-11T07:08:16+00:00,mw,smoke,natural,ALL,ONE,ALL,40,40,0,0.0000,0,0.0000,W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
+2026-09-11T07:09:11+00:00,mw,smoke,skew,ALL,ONE,ALL,40,40,40,1.0000,0,0.0000,W1_wins=40 neither_visible=0 skew_us=500000 path=node2->node3
+2026-09-11T07:10:18+00:00,wfr,smoke,natural,ONE,ONE,ALL,40,1,0,0.0000,0,0.0000,stale_trigger=39 read_none=0 client_write_lost=0 skew_us=0 setup_cl=ALL
+2026-09-11T07:11:31+00:00,wfr,smoke,skew,ONE,ONE,ALL,40,40,0,0.0000,0,0.0000,stale_trigger=0 read_none=0 client_write_lost=0 skew_us=500000 setup_cl=ALL
+2026-09-11T07:12:55+00:00,wfr,smoke,natural,QUORUM,QUORUM,ALL,40,40,0,0.0000,0,0.0000,stale_trigger=0 read_none=0 client_write_lost=0 skew_us=0 setup_cl=ALL
+2026-09-11T07:14:22+00:00,wfr,smoke,skew,QUORUM,QUORUM,ALL,40,40,0,0.0000,0,0.0000,stale_trigger=0 read_none=0 client_write_lost=0 skew_us=500000 setup_cl=ALL
+2026-09-11T07:15:35+00:00,wfr,smoke,natural,ALL,ONE,ALL,40,40,0,0.0000,0,0.0000,stale_trigger=0 read_none=0 client_write_lost=0 skew_us=0 setup_cl=ALL
+2026-09-11T07:16:49+00:00,wfr,smoke,skew,ALL,ONE,ALL,40,40,0,0.0000,0,0.0000,stale_trigger=0 read_none=0 client_write_lost=0 skew_us=500000 setup_cl=ALL
+2026-09-11T07:19:42+00:00,wfr,smoke,skew,ONE,ONE,ALL,20,20,20,1.0000,0,0.0000,stale_trigger=0 read_none=0 client_write_lost=20 skew_us=5000000 mean_gap_us=924063 skew_too_small=0 setup_cl=ALL

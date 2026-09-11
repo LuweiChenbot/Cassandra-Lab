@@ -84,17 +84,19 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl):
     iterations = triggered = violations = errors = 0
     stale_trigger = read_none = 0
     client_write_lost = 0
+    skew_too_small = 0                 # 偏移被迭代耗时吃掉, 该次迭代不可能违例
+    elapsed_sum = elapsed_n = 0        # base -> 客户端写 的实际间隔
     step = max(1, args.iterations // 10)
 
     for i in range(1, args.iterations + 1):
         iterations += 1
         key = f"{MODEL}_{mode}_{run_id}_{i}"
         try:
+            base = now_us()
             if mode == "natural":
                 wn.write(key, V_A, s_cl, writer="Wa")
                 wn.write(key, V_B, wb_cl, writer="Wb")
             else:
-                base = now_us()
                 wn.write(key, V_A, s_cl, writer="Wa", timestamp=base)
                 wn.write(key, V_B, wb_cl, writer="Wb", timestamp=base + args.skew_us)
 
@@ -103,8 +105,16 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl):
 
             r = rn.read(key, r_cl)                         # 触发 WFR 义务的那次读
             new_val = (r if r is not None else 0) + OFFSET
+            # 客户端这次写用驱动的自然时间戳(约等于此刻墙上时钟)。
+            # 记录它是为了判定: 偏移 skew 是否大于 "W_b 到本次写" 的实际间隔 ——
+            # 小于的话客户端时间戳反而更高, 违例根本无法成立。
+            t_client = now_us()
             cn.write(key, new_val, w_cl, writer="client")  # 读-改-写
             final = vn.read(key, v_cl)                     # 收敛后的定序结果
+            elapsed_sum += t_client - base
+            elapsed_n += 1
+            if mode == "skew" and t_client >= base + args.skew_us:
+                skew_too_small += 1
         except TRANSIENT_ERRORS as e:
             errors += 1
             if errors <= 3:
@@ -139,6 +149,8 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl):
         extra=f"stale_trigger={stale_trigger} read_none={read_none} "
               f"client_write_lost={client_write_lost} "
               f"skew_us={args.skew_us if mode == 'skew' else 0} "
+              f"mean_gap_us={int(elapsed_sum / elapsed_n) if elapsed_n else 0} "
+              f"skew_too_small={skew_too_small} "
               f"setup_cl={args.setup_cl}",
     )
 
@@ -146,8 +158,11 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl):
 def main():
     p = build_parser(MODEL)
     p.add_argument("--mode", default="both", choices=["natural", "skew", "both"])
-    p.add_argument("--skew-us", type=int, default=500_000,
-                   help="构造的时钟偏移(微秒), 默认 500000 = 500ms")
+    p.add_argument("--skew-us", type=int, default=5_000_000,
+                   help="构造的时钟偏移(微秒), 默认 5000000 = 5s。"
+                        "必须大于 W_b 到客户端后续写之间的实际间隔, "
+                        "否则客户端的自然时间戳反而更高, 违例无法成立。"
+                        "注入 200ms 复制延迟后该间隔实测约 1.1-1.4s。")
     p.add_argument("--setup-cl", default="ALL", help="W_a 装置写的一致性级别")
     p.add_argument("--write-node", type=int, default=1, help="W_a / W_b 的协调者")
     p.add_argument("--read-node", type=int, default=2, help="客户端读的节点")
