@@ -1,5 +1,0 @@
-run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,violations,violation_rate,errors,error_rate,extra
-2026-09-11T07:06:44+00:00,mw,smoke,natural,ONE,ONE,ALL,40,40,0,0.0000,0,0.0000,W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
-2026-09-11T07:07:21+00:00,mw,smoke,skew,ONE,ONE,ALL,40,40,40,1.0000,0,0.0000,W1_wins=40 neither_visible=0 skew_us=500000 path=node2->node3
-2026-09-11T07:08:16+00:00,mw,smoke,natural,ALL,ONE,ALL,40,40,0,0.0000,0,0.0000,W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
-2026-09-11T07:09:11+00:00,mw,smoke,skew,ALL,ONE,ALL,40,40,40,1.0000,0,0.0000,W1_wins=40 neither_visible=0 skew_us=500000 path=node2->node3

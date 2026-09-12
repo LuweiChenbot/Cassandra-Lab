@@ -22,6 +22,7 @@ Python 驱动默认用 TokenAwarePolicy(DCAwareRoundRobinPolicy) 做负载均衡
 """
 import argparse
 import csv
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -53,7 +54,7 @@ CSV_FIELDS = [
     "run_ts", "model", "scenario", "mode",
     "write_cl", "read_cl", "verify_cl",
     "iterations", "triggered", "violations", "violation_rate",
-    "errors", "error_rate", "extra",
+    "errors", "error_rate", "topology", "extra",
 ]
 
 # 驱动在不可用 / 超时 时抛出的异常, 统一捕获并计入 errors 而不是让脚本崩掉。
@@ -203,7 +204,7 @@ def record(row):
 
 
 def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
-              iterations, triggered, violations, errors, extra=""):
+              iterations, triggered, violations, errors, extra="", topology=""):
     """算出比率、打印到终端、写 CSV。返回该行 dict。"""
     denom = triggered if triggered else 0
     v_rate = (violations / denom) if denom else 0.0
@@ -215,6 +216,7 @@ def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
         "iterations": iterations, "triggered": triggered,
         "violations": violations, "violation_rate": f"{v_rate:.4f}",
         "errors": errors, "error_rate": f"{e_rate:.4f}",
+        "topology": topology,
         "extra": extra,
     }
     print(f"\n  {'-'*66}")
@@ -234,8 +236,6 @@ def build_parser(model, default_write="ONE", default_read="ONE"):
     p = argparse.ArgumentParser(description=f"{model} 一致性实验")
     p.add_argument("--write-cl", default=default_write, help="写一致性级别 ONE/QUORUM/ALL")
     p.add_argument("--read-cl", default=default_read, help="读一致性级别 ONE/QUORUM/ALL")
-    p.add_argument("--verify-cl", default="ALL",
-                   help="收敛后校验用的读级别 (MW/WFR 判定最终序需要看全副本)")
     p.add_argument("-n", "--iterations", type=int, default=1000, help="循环次数")
     p.add_argument("--scenario", default="normal",
                    help="场景标签: normal / node_failure / partition")
@@ -243,7 +243,114 @@ def build_parser(model, default_write="ONE", default_read="ONE"):
                    help="本次实验需要连接的节点, 逗号分隔 (节点故障时用 1,2)")
     p.add_argument("--sleep-ms", type=float, default=0.0,
                    help="写与读之间插入的等待毫秒数 (默认 0, 即尽快读)")
+    p.add_argument("--skip-topology-check", action="store_true",
+                   help="跳过开跑前的拓扑自检 (不推荐; 会产生标签可能不实的数据)")
+    p.add_argument("--no-trace", action="store_true",
+                   help="不写逐次迭代的 JSONL 明细")
     return p
+
+
+# ---------------------------------------------------------------- 参数校验
+
+def validate(args, roles):
+    """
+    开跑前把不合法的参数组合拦下来, 给出说明性错误而不是运行中 KeyError。
+
+    roles: {"--write-node": args.write_node, ...} —— 本实验用到的节点角色。
+    """
+    errs, warns = [], []
+
+    if args.iterations <= 0:
+        errs.append(f"--iterations 必须为正整数, 收到 {args.iterations}")
+
+    try:
+        nodes = parse_nodes(args.nodes)
+    except Exception:
+        errs.append(f"--nodes 无法解析: {args.nodes!r} (期望形如 1,2,3)")
+        nodes = ()
+
+    unknown = [n for n in nodes if n not in NODE_PORTS]
+    if unknown:
+        errs.append(f"--nodes 含未知节点号 {unknown}, 只能是 {sorted(NODE_PORTS)}")
+    if len(set(nodes)) != len(nodes):
+        errs.append(f"--nodes 有重复: {args.nodes!r}")
+
+    # 角色节点必须在连接列表里 —— 否则运行到一半 KeyError
+    for flag, n in roles.items():
+        if nodes and n not in nodes:
+            errs.append(
+                f"{flag}={n} 不在 --nodes={','.join(map(str, nodes))} 之内。"
+                f"故障/分区场景下请显式指定该角色, 可选 {sorted(nodes)}")
+
+    # 一致性级别拼写
+    cl_flags = [("--write-cl", args.write_cl), ("--read-cl", args.read_cl)]
+    for name in ("verify_cl", "setup_cl", "seed_cl"):
+        if hasattr(args, name):
+            cl_flags.append((f"--{name.replace('_', '-')}", getattr(args, name)))
+    for flag, val in cl_flags:
+        if str(val).strip().upper() not in CL_BY_NAME:
+            errs.append(f"{flag}={val!r} 不是合法一致性级别, 可选 {list(CL_BY_NAME)}")
+
+    # RF=3 下 ALL 需要三个副本都在。
+    #   装置用的 CL 不可用 -> 整轮数据作废, 按错误拦下;
+    #   自变量 CL 不可用 -> 那正是要测的现象(记录 Unavailable), 只告警。
+    if nodes and len(nodes) < 3:
+        for name, flag in (("setup_cl", "--setup-cl"), ("verify_cl", "--verify-cl"),
+                           ("seed_cl", "--seed-cl")):
+            if hasattr(args, name) and str(getattr(args, name)).upper() == "ALL":
+                errs.append(
+                    f"{flag}=ALL 但只连接了 {len(nodes)} 个节点。"
+                    f"{flag} 是实验装置而非自变量, 不可用会让整轮迭代全部作废。"
+                    f"故障/分区场景请改用 {flag} QUORUM。")
+        for flag, val in (("--write-cl", args.write_cl), ("--read-cl", args.read_cl)):
+            if str(val).upper() == "ALL":
+                warns.append(
+                    f"{flag}=ALL 且只连接了 {len(nodes)} 个节点 —— "
+                    "预期会持续抛 Unavailable。这本身就是要记录的数据, 继续执行。")
+
+    for w in warns:
+        print(f"  [告警] {w}")
+    if errs:
+        print()
+        print("  [参数校验] 以下参数不合法, 已中止:")
+        for e in errs:
+            print(f"      ! {e}")
+        print()
+        raise SystemExit(2)
+
+
+# ---------------------------------------------------------------- 逐次明细
+
+class TraceWriter:
+    """
+    每次迭代写一行 JSON, 让汇总 CSV 里的每个数字都能追溯到原始证据。
+
+    汇总表回答"违例率是多少", 明细回答"具体哪一次、写了什么、读到什么、
+    经过哪个协调者、时间戳多少、异常是哪一类"。出了反常结果时,
+    没有明细就只能重跑并祈祷复现。
+    """
+
+    def __init__(self, model, scenario, mode, write_cl, read_cl, run_id, enabled=True):
+        self.enabled = bool(enabled)
+        self.path = None
+        self.fh = None
+        if not self.enabled:
+            return
+        d = os.path.join(RESULTS_DIR, "traces")
+        os.makedirs(d, exist_ok=True)
+        self.path = os.path.join(
+            d, f"{model}_{scenario}_{mode}_W{write_cl}_R{read_cl}_{run_id}.jsonl")
+        self.fh = open(self.path, "w", encoding="utf-8")
+
+    def write(self, **rec):
+        if self.fh is not None:
+            self.fh.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+
+    def close(self):
+        if self.fh is not None:
+            self.fh.close()
+            self.fh = None
+            print(f"  逐次明细 -> {os.path.relpath(self.path)}")
 
 
 def parse_nodes(s):

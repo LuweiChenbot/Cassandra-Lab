@@ -1,5 +1,0 @@
-run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,violations,violation_rate,errors,error_rate,extra
-2026-09-11T07:02:17+00:00,ryw,smoke,natural,ONE,ONE,-,40,40,37,0.9250,0,0.0000,read_none=37 read_stale=0 w_node=1 r_node=2
-2026-09-11T07:03:06+00:00,ryw,smoke,natural,ONE,QUORUM,-,40,40,10,0.2500,0,0.0000,read_none=10 read_stale=0 w_node=1 r_node=2
-2026-09-11T07:03:39+00:00,ryw,smoke,natural,QUORUM,QUORUM,-,40,40,0,0.0000,0,0.0000,read_none=0 read_stale=0 w_node=1 r_node=2
-2026-09-11T07:03:59+00:00,ryw,smoke,natural,ALL,ONE,-,40,40,0,0.0000,0,0.0000,read_none=0 read_stale=0 w_node=1 r_node=2

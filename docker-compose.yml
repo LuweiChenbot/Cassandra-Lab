@@ -1,6 +1,10 @@
+# project name 必须固定: compose 默认用目录名当 project name,
+# 网络会叫 <project>_cassnet。组员 clone 到不同目录名下就会对不上。
+name: cassandra-lab
+
 services:
   cass1:
-    image: cassandra:4.1
+    image: cassandra:4.1.12
     container_name: cass1
     networks: [cassnet]
     ports: ["9042:9042"]
@@ -8,18 +12,20 @@ services:
     environment:
       CASSANDRA_CLUSTER_NAME: consistency_lab
       CASSANDRA_SEEDS: cass1
-      CASSANDRA_DC: dc1
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
+    # 探针必须是"节点本地"判据: nodetool status 打印的是整个环,
+    # 在非 seed 节点上会误匹配到 seed 自己的 UN 行, 从而提前放行。
+    # statusbinary(CQL 端口在服务) + netstats Mode:NORMAL(bootstrap 已结束) 才是本地状态。
     healthcheck:
-      test: ["CMD-SHELL", "nodetool status | grep -q '^UN'"]
+      test: ["CMD-SHELL", "nodetool statusbinary | grep -q running && nodetool netstats | grep -q 'Mode: NORMAL'"]
       interval: 20s
       timeout: 15s
       retries: 20
       start_period: 60s
 
   cass2:
-    image: cassandra:4.1
+    image: cassandra:4.1.12
     container_name: cass2
     networks: [cassnet]
     ports: ["9043:9042"]
@@ -27,11 +33,8 @@ services:
     environment:
       CASSANDRA_CLUSTER_NAME: consistency_lab
       CASSANDRA_SEEDS: cass1
-      CASSANDRA_DC: dc1
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
-    # 本节点自身就绪才算 healthy：CQL 端口在服务 + bootstrap 已结束(Mode: NORMAL)
-    # 不能沿用 cass1 的 "nodetool status | grep '^UN'"——那会匹配到 cass1 自己的行
     healthcheck:
       test: ["CMD-SHELL", "nodetool statusbinary | grep -q running && nodetool netstats | grep -q 'Mode: NORMAL'"]
       interval: 20s
@@ -43,7 +46,7 @@ services:
         condition: service_healthy
 
   cass3:
-    image: cassandra:4.1
+    image: cassandra:4.1.12
     container_name: cass3
     networks: [cassnet]
     ports: ["9044:9042"]
@@ -51,7 +54,6 @@ services:
     environment:
       CASSANDRA_CLUSTER_NAME: consistency_lab
       CASSANDRA_SEEDS: cass1
-      CASSANDRA_DC: dc1
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
     healthcheck:

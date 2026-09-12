@@ -1,0 +1,10 @@
+# 实验环境快照 (由 scripts/bootstrap.sh 生成)
+生成时间: 2026-09-11T08:00:13Z
+
+Cassandra 镜像标签 : cassandra:4.1.12
+Cassandra 镜像摘要 : sha256:b8be963f712af289bf09edd8868ca9d794172bb7221edacffb5bd7445b4df9d2
+Cassandra 版本     : 4.1.12
+Python             : Python 3.12.2
+cassandra-driver   : 3.30.1
+Docker             : 28.4.0
+宿主机             : Darwin 25.6.0 arm64
