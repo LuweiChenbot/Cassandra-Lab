@@ -1,0 +1,5 @@
+run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,violations,violation_rate,errors,error_rate,topology,extra
+2026-09-12T13:26:24+00:00,ryw,normal,natural,ONE,ONE,-,200,200,200,1.0000,0,0.0000,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",read_none=200 read_stale=0 w_node=1 r_node=2
+2026-09-12T13:46:59+00:00,ryw,normal,natural,ONE,QUORUM,-,200,200,60,0.3000,0,0.0000,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",read_none=60 read_stale=0 w_node=1 r_node=2
+2026-09-12T14:13:25+00:00,ryw,normal,natural,QUORUM,QUORUM,-,200,200,0,0.0000,0,0.0000,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",read_none=0 read_stale=0 w_node=1 r_node=2
+2026-09-12T14:42:40+00:00,ryw,normal,natural,ALL,ONE,-,200,200,0,0.0000,0,0.0000,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",read_none=0 read_stale=0 w_node=1 r_node=2
