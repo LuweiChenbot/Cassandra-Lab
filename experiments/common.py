@@ -27,6 +27,7 @@ import os
 import time
 from datetime import datetime, timezone
 
+import topology as topology_mod
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.policies import WhiteListRoundRobinPolicy
@@ -54,7 +55,7 @@ CSV_FIELDS = [
     "run_ts", "model", "scenario", "mode",
     "write_cl", "read_cl", "verify_cl",
     "iterations", "triggered", "violations", "violation_rate",
-    "errors", "error_rate", "topology", "extra",
+    "errors", "error_rate", "delay_ms", "jitter_ms", "topology", "extra",
 ]
 
 # 驱动在不可用 / 超时 时抛出的异常, 统一捕获并计入 errors 而不是让脚本崩掉。
@@ -189,12 +190,43 @@ def now_us():
 
 # ---------------------------------------------------------------- 结果记录
 
+def _migrate_header(path):
+    """
+    已有 CSV 的表头与当前 CSV_FIELDS 不一致时, 就地重写成新表头,
+    缺失的列留空, 多余的列丢弃。
+
+    为什么需要: 给 CSV 加列之后, 老文件的表头还是旧的。DictWriter 不会
+    校验文件里已有的表头, 会直接按新字段数追加 —— 结果是表头 N 列、
+    新行 N+2 列的错位文件, 而且不会报错。组员拉到新代码但本地留着旧结果
+    时必然踩这个坑, 所以放在写入路径上自动处理。
+    """
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return
+    with open(path, newline="") as fh:
+        reader = csv.reader(fh)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return
+        if header == CSV_FIELDS:
+            return
+        old_rows = [dict(zip(header, r)) for r in reader]
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
+        w.writeheader()
+        for r in old_rows:
+            w.writerow({k: r.get(k, "") for k in CSV_FIELDS})
+    print(f"  [CSV 迁移] {os.path.relpath(path)}: "
+          f"{len(header)} 列 -> {len(CSV_FIELDS)} 列, {len(old_rows)} 行已保留")
+
+
 def record(row):
     """把一行结果追加到 results/<model>.csv 和 results/all_results.csv。"""
     os.makedirs(RESULTS_DIR, exist_ok=True)
     row = {k: row.get(k, "") for k in CSV_FIELDS}
     for path in (os.path.join(RESULTS_DIR, f"{row['model']}.csv"),
                  os.path.join(RESULTS_DIR, "all_results.csv")):
+        _migrate_header(path)
         is_new = not os.path.exists(path)
         with open(path, "a", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
@@ -216,6 +248,9 @@ def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
         "iterations": iterations, "triggered": triggered,
         "violations": violations, "violation_rate": f"{v_rate:.4f}",
         "errors": errors, "error_rate": f"{e_rate:.4f}",
+        # 从 tc 读回来的实际生效值, 不是命令行声称的值
+        "delay_ms": topology_mod.LAST_NETEM["delay_ms"],
+        "jitter_ms": topology_mod.LAST_NETEM["jitter_ms"],
         "topology": topology,
         "extra": extra,
     }

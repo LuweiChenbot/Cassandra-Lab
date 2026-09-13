@@ -40,15 +40,30 @@ for c in $NODES; do
 
   docker exec "$c" tc qdisc add dev eth0 root handle 1: prio bands 4 \
       priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-  docker exec "$c" tc qdisc add dev eth0 parent 1:2 handle 20: \
-      netem delay "$DELAY" "$JITTER" distribution normal
+  # 抖动为 0 时必须省略 jitter 和 distribution ——
+  # netem 的 "distribution normal" 需要非零 jitter, 否则报
+  # "distribution specified but no latency and jitter values"。
+  # 延迟扫描要的正是确定性的标量延迟, 所以这条分支是常用路径而非边缘情况。
+  case "$JITTER" in
+    0|0ms|0s|"")
+      docker exec "$c" tc qdisc add dev eth0 parent 1:2 handle 20: \
+          netem delay "$DELAY"
+      ;;
+    *)
+      docker exec "$c" tc qdisc add dev eth0 parent 1:2 handle 20: \
+          netem delay "$DELAY" "$JITTER" distribution normal
+      ;;
+  esac
   docker exec "$c" tc qdisc add dev eth0 parent 1:3 handle 30: \
       netem loss 100%
   # 所有去往 storage_port 的流量 -> 延迟带
   docker exec "$c" tc filter add dev eth0 protocol ip parent 1:0 prio 3 u32 \
       match ip dport $STORAGE_PORT 0xffff flowid 1:2
 
-  echo "[$c] 已注入: dport ${STORAGE_PORT} 延迟 ${DELAY} ± ${JITTER}"
+  case "$JITTER" in
+    0|0ms|0s|"") echo "[$c] 已注入: dport ${STORAGE_PORT} 延迟 ${DELAY} (无抖动)" ;;
+    *)           echo "[$c] 已注入: dport ${STORAGE_PORT} 延迟 ${DELAY} ± ${JITTER}" ;;
+  esac
 done
 
 echo

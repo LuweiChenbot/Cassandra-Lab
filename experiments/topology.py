@@ -47,12 +47,40 @@ def nodetool_status(container):
     return ring
 
 
+_UNIT_MS = {"us": 0.001, "ms": 1.0, "s": 1000.0}
+_DELAY_RE = re.compile(
+    r"delay\s+([\d.]+)(us|ms|s)\b(?:\s+([\d.]+)(us|ms|s)\b)?")
+
+
+def parse_netem_delay(qdisc_text):
+    """
+    从 tc qdisc 输出里读出实际生效的 delay/jitter (毫秒)。
+
+    为什么不直接信命令行参数: 扫描实验里延迟是自变量, 如果只把"打算设成多少"
+    写进结果, 一旦某个节点的 tc 没生效(例如 qdisc 被意外清掉), 数据会带着
+    错误的横坐标而无法察觉。从 tc 读回来才是观测值。
+    """
+    for line in qdisc_text.splitlines():
+        if "delay" not in line:
+            continue
+        m = _DELAY_RE.search(line)
+        if not m:
+            continue
+        delay = float(m.group(1)) * _UNIT_MS[m.group(2)]
+        jitter = float(m.group(3)) * _UNIT_MS[m.group(4)] if m.group(3) else 0.0
+        return round(delay, 3), round(jitter, 3)
+    return 0.0, 0.0
+
+
 def tc_state(container):
-    """netem 规则现状: 是否有延迟带、是否有丢包带、分区 filter 有几条。"""
+    """netem 规则现状: 延迟/抖动实际值、是否有丢包带、分区 filter 有几条。"""
     _, qdisc, _ = _run(["docker", "exec", container, "tc", "qdisc", "show", "dev", "eth0"])
     _, filt, _ = _run(["docker", "exec", container, "tc", "filter", "show", "dev", "eth0"])
+    delay_ms, jitter_ms = parse_netem_delay(qdisc)
     return {
-        "delay": "delay" in qdisc,
+        "delay": delay_ms > 0,
+        "delay_ms": delay_ms,
+        "jitter_ms": jitter_ms,
         "loss": "loss" in qdisc,
         # band 1:3 专门用于分区丢包(见 scripts/partition.sh)
         "partition_filters": filt.count("flowid 1:3"),
@@ -169,6 +197,11 @@ def check_scenario(scenario, strict=True):
     return snap, problems
 
 
+# enforce() 观测到的 netem 实际值, 由 common.summarize() 读取写入 CSV。
+# 这样 4 个实验脚本都不用改签名。
+LAST_NETEM = {"delay_ms": "", "jitter_ms": ""}
+
+
 def enforce(scenario, skip=False):
     """打印拓扑; 不一致则退出。返回快照的一行摘要, 供写入结果。"""
     snap, problems = check_scenario(scenario)
@@ -185,6 +218,19 @@ def enforce(scenario, skip=False):
                 print(f"      ! {p}")
             print("\n  确认无误想强制继续, 加 --skip-topology-check\n")
             raise SystemExit(2)
+    # 取各节点 netem 的众数作为本轮的延迟观测值; 三个节点应当一致,
+    # 不一致说明注入没铺全, 在摘要里显式标出来
+    delays = sorted({d["tc"]["delay_ms"] for d in snap["nodes"].values()
+                     if d.get("running") and d.get("tc")})
+    jitters = sorted({d["tc"]["jitter_ms"] for d in snap["nodes"].values()
+                      if d.get("running") and d.get("tc")})
+    LAST_NETEM["delay_ms"] = delays[0] if len(delays) == 1 else f"MIXED{delays}"
+    LAST_NETEM["jitter_ms"] = jitters[0] if len(jitters) == 1 else f"MIXED{jitters}"
+    if len(delays) > 1:
+        print(f"  [拓扑自检] 警告: 各节点 netem 延迟不一致 {delays} —— "
+              f"重跑 ./scripts/inject_latency.sh")
+
     uns = un_counts(snap)
     return (f"running={'/'.join(snap['running'])} "
-            f"un={','.join(f'{c}:{n}' for c, n in sorted(uns.items()))}")
+            f"un={','.join(f'{c}:{n}' for c, n in sorted(uns.items()))} "
+            f"delay={LAST_NETEM['delay_ms']}ms")
