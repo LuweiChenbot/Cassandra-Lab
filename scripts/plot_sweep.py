@@ -66,27 +66,45 @@ for r in rows:
     if int(r.get("errors") or 0) > 0:
         errors_seen[key] = errors_seen.get(key, 0) + int(r["errors"])
 
+# 与下面的去重逻辑保持一致: 取最后一条扫描行的迭代数。
+# 取第一条会在重跑后显示旧的(更小的)n, 与曲线实际依据的数据不符。
+_sweep_rows = [r for r in rows if is_sweep_row(r)]
+N_ITER = _sweep_rows[-1]["iterations"] if _sweep_rows else "?"
+
 if not points:
     sys.exit(f"{SRC} 里没有扫描数据(jitter=0 的行) —— 先跑 "
              f"./scripts/sweep_latency.sh {MODEL}")
 
-plt.figure(figsize=(9, 5.5))
-for (w, r), series in points.items():
-    xs = sorted(series)
-    ys = [series[x] for x in xs]
-    label = f"W={w}  R={r}"
-    if (w, r) in errors_seen:
-        label += f"  (异常 {errors_seen[(w, r)]})"
-    plt.plot(xs, ys, marker="o", linewidth=2, markersize=6, label=label)
+# 双面板: 全量程线性横轴会把拐点压成一根垂直线 ——
+# RYW 的过渡区在 0-2ms(客户端往返的时间尺度), 而量程要到 800ms 才能
+# 看出饱和与零线。单张图无法同时呈现这两个尺度。
+ZOOM_MAX = 25.0
+fig, (ax_zoom, ax_full) = plt.subplots(1, 2, figsize=(13, 5.2))
 
-plt.xlabel("注入的单向复制延迟 (ms)", fontsize=11)
-plt.ylabel(f"{MODEL.upper()} 违例率 (%)", fontsize=11)
-plt.title(f"{MODEL.upper()} 违例率 vs 复制延迟（RF=3，jitter=0）", fontsize=13)
-plt.ylim(-3, 103)
-plt.legend(fontsize=10)
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig(OUT, dpi=150)
+for ax, xmax, title in (
+        (ax_zoom, ZOOM_MAX, f"低延迟区放大（0–{int(ZOOM_MAX)} ms）"),
+        (ax_full, None, "全量程（0–800 ms）")):
+    for (w, r), series in points.items():
+        xs = sorted(x for x in series if xmax is None or x <= xmax)
+        if not xs:
+            continue
+        ys = [series[x] for x in xs]
+        label = f"W={w}  R={r}"
+        if (w, r) in errors_seen:
+            label += f"  (异常 {errors_seen[(w, r)]})"
+        ax.plot(xs, ys, marker="o", linewidth=2, markersize=5, label=label)
+    ax.set_xlabel("注入的单向复制延迟 (ms)", fontsize=11)
+    ax.set_ylim(-3, 103)
+    ax.set_title(title, fontsize=12)
+    ax.grid(True, alpha=0.3)
+
+ax_zoom.set_ylabel(f"{MODEL.upper()} 违例率 (%)", fontsize=11)
+ax_full.legend(fontsize=9, loc="center right")
+fig.suptitle(
+    f"{MODEL.upper()} 违例率 vs 复制延迟（3 节点，RF=3，jitter=0，n={N_ITER}）",
+    fontsize=13.5)
+fig.tight_layout(rect=[0, 0, 1, 0.94])
+fig.savefig(OUT, dpi=150)
 
 n_pts = sum(len(s) for s in points.values())
 print(f"已保存 -> {OUT}  ({len(points)} 条曲线, {n_pts} 个数据点)")
