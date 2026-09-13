@@ -2,3 +2,6 @@
 # 升级前请确认实验结论不受影响 —— 驱动的默认 timestamp_generator
 # 行为直接决定 MW/WFR 的实验前提 (见 experiments/mw_test.py 说明)。
 cassandra-driver==3.30.1
+
+# 延迟扫描出图用 (scripts/plot_sweep.py)
+matplotlib==3.11.2

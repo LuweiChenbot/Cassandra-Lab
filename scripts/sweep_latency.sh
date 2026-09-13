@@ -28,7 +28,7 @@ N="${2:-200}"
 shift 2 2>/dev/null || shift $# 
 DELAYS=("$@")
 if [ ${#DELAYS[@]} -eq 0 ]; then
-  DELAYS=(0 25 50 100 200 400)
+  DELAYS=(0 25 50 100 200 400 800)
 fi
 
 PY=./.venv/bin/python
