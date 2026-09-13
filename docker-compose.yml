@@ -1,5 +1,3 @@
-# project name 必须固定: compose 默认用目录名当 project name,
-# 网络会叫 <project>_cassnet。组员 clone 到不同目录名下就会对不上。
 name: cassandra-lab
 
 services:
@@ -14,9 +12,6 @@ services:
       CASSANDRA_SEEDS: cass1
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
-    # 探针必须是"节点本地"判据: nodetool status 打印的是整个环,
-    # 在非 seed 节点上会误匹配到 seed 自己的 UN 行, 从而提前放行。
-    # statusbinary(CQL 端口在服务) + netstats Mode:NORMAL(bootstrap 已结束) 才是本地状态。
     healthcheck:
       test: ["CMD-SHELL", "nodetool statusbinary | grep -q running && nodetool netstats | grep -q 'Mode: NORMAL'"]
       interval: 20s
