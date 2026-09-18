@@ -1,5 +1,7 @@
 # Cassandra Client-Centric Consistency Lab
 
+> **第一次用？** 先看 [QUICKSTART.md](QUICKSTART.md) —— 终端操作手册：启动集群、跑一条 RYW 实验、看结果、收工。
+
 用 3 节点 Cassandra 集群（RF=3）实验验证四种 client-centric consistency（会话一致性）模型：
 
 | 模型 | 含义 |
@@ -80,11 +82,14 @@ docker exec cass1 nodetool describecluster
 
 不注入延迟的话，本机三个容器之间复制只要几毫秒，违例窗口太窄，基本观测不到。
 
-```bash
-./scripts/inject_latency.sh                            # 默认 200ms ± 50ms
-DELAY=300ms JITTER=80ms ./scripts/inject_latency.sh    # 自定义
-./scripts/clear_latency.sh                             # 全部清除
-```
+| 命令 | 作用 |
+|---|---|
+| `./scripts/inject_latency.sh` | 注入默认的 200ms ± 50ms |
+| `DELAY=300ms JITTER=80ms ./scripts/inject_latency.sh` | 自定义延迟和抖动 |
+| `DELAY=100ms JITTER=0ms ./scripts/inject_latency.sh` | 无抖动（延迟扫描用） |
+| `./scripts/clear_latency.sh` | 全部清除 |
+
+> 容器重启后 tc 规则会丢失（它在容器的网络命名空间里，不在磁盘上），**每次启动集群后都要重新注入**。
 
 **只延迟目的端口 7000**（`storage_port`，节点间 gossip/复制），**不碰 9042**（客户端 CQL）。
 
@@ -170,11 +175,13 @@ docker start cass3
 
 ### 网络分区
 
+`partition.sh cass3` 切断 cass3 与其余两个节点之间的 `:7000` 通信，`heal_partition.sh` 恢复：
+
 ```bash
-./scripts/partition.sh cass3          # 切断 cass3 与其余节点的 :7000
+./scripts/partition.sh cass3
 ./scripts/run_matrix.sh partition_majority 1000
 ./scripts/run_matrix.sh partition_minority 1000
-./scripts/heal_partition.sh           # 恢复
+./scripts/heal_partition.sh
 ```
 
 **为什么不用 `docker network disconnect`**
