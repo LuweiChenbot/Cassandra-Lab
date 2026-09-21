@@ -28,14 +28,12 @@ import matplotlib.pyplot as plt
 
 # 中文标签需要 CJK 字体, 否则渲染成豆腐块。按 macOS -> Linux 顺序回退。
 matplotlib.rcParams["font.sans-serif"] = [
-    "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Songti SC",
-    "Arial Unicode MS", "Noto Sans CJK SC", "WenQuanYi Zen Hei", "DejaVu Sans",
-]
+    "Microsoft Yahei", "SimHei"]
 matplotlib.rcParams["axes.unicode_minus"] = False
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "ryw"
-SRC = f"results/{MODEL}.csv"
-OUT = f"results/{MODEL}_delay_curves.png"
+SRC = f"results_Luwei/{MODEL}.csv"
+OUT = f"results_Luwei/{MODEL}_delay_curves.png"
 
 if not os.path.exists(SRC):
     sys.exit(f"找不到 {SRC} —— 先跑 ./scripts/sweep_latency.sh {MODEL}")
@@ -82,8 +80,8 @@ ZOOM_MAX = 25.0
 fig, (ax_zoom, ax_full) = plt.subplots(1, 2, figsize=(13, 5.2))
 
 for ax, xmax, title in (
-        (ax_zoom, ZOOM_MAX, f"低延迟区放大（0–{int(ZOOM_MAX)} ms）"),
-        (ax_full, None, "全量程（0–800 ms）")):
+        (ax_zoom, ZOOM_MAX, f"Focus on low latency areas (0–{int(ZOOM_MAX)} ms)"),
+        (ax_full, None, "Full range (0–800 ms)")):
     for (w, r), series in points.items():
         xs = sorted(x for x in series if xmax is None or x <= xmax)
         if not xs:
@@ -91,17 +89,17 @@ for ax, xmax, title in (
         ys = [series[x] for x in xs]
         label = f"W={w}  R={r}"
         if (w, r) in errors_seen:
-            label += f"  (异常 {errors_seen[(w, r)]})"
+            label += f"  (errors: {errors_seen[(w, r)]})"
         ax.plot(xs, ys, marker="o", linewidth=2, markersize=5, label=label)
-    ax.set_xlabel("注入的单向复制延迟 (ms)", fontsize=11)
+    ax.set_xlabel("Delay (ms)", fontsize=11)
     ax.set_ylim(-3, 103)
     ax.set_title(title, fontsize=12)
     ax.grid(True, alpha=0.3)
 
-ax_zoom.set_ylabel(f"{MODEL.upper()} 违例率 (%)", fontsize=11)
+ax_zoom.set_ylabel(f"{MODEL.upper()} violation rate (%)", fontsize=11)
 ax_full.legend(fontsize=9, loc="center right")
 fig.suptitle(
-    f"{MODEL.upper()} 违例率 vs 复制延迟（3 节点，RF=3，jitter=0，n={N_ITER}）",
+    f"{MODEL.upper()} violation rate vs replication delay (3 nodes, RF=3, jitter=0, n={N_ITER})",
     fontsize=13.5)
 fig.tight_layout(rect=[0, 0, 1, 0.94])
 fig.savefig(OUT, dpi=150)

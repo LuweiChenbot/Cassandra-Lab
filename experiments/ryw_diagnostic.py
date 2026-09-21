@@ -36,8 +36,7 @@ def execute_write_traced(node, key, value, consistency):
     result = node.session.execute(bs, trace=True)
     t1 = time.perf_counter_ns()
 
-    trace = result.get_query_trace(max_wait=10.0)
-    return trace, t0, t1
+    return result, t0, t1
 
 
 def execute_read_traced(node, key, consistency):
@@ -50,14 +49,13 @@ def execute_read_traced(node, key, consistency):
     row = result.one()
     t3 = time.perf_counter_ns()
 
-    trace = result.get_query_trace(max_wait=10.0)
 
     if row is None:
         value, writer, wt = None, None, None
     else:
         value, writer, wt = row.value, row.writer, row.wt
 
-    return value, writer, wt, trace, t2, t3
+    return value, writer, wt, result, t2, t3
 
 
 def trace_to_dict(trace):
@@ -186,17 +184,19 @@ def main():
                 }
 
                 try:
-                    wtrace, t0, t1 = execute_write_traced(
+                    wresult, t0, t1 = execute_write_traced(
                         wn, key, i, w_cl
                     )
 
                     if args.sleep_ms:
                         time.sleep(args.sleep_ms / 1000.0)
 
-                    got, writer, wt, rtrace, t2, t3 = execute_read_traced(
+                    got, writer, wt, rresult, t2, t3 = execute_read_traced(
                         rn, key, r_cl
                     )
 
+                    wtrace = wresult.get_query_trace(max_wait_sec=10.0)
+                    rtrace = rresult.get_query_trace(max_wait_sec=10.0)
                     violated = got != i
                     violations += int(violated)
 
