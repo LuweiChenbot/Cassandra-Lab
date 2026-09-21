@@ -39,7 +39,7 @@ run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,viola
 2026-09-20T16:36:57+00:00,mr,normal,natural,ONE,QUORUM,-,100,100,0,0,0,0,15,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=15.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
 2026-09-20T16:37:30+00:00,mr,normal,natural,QUORUM,QUORUM,-,100,100,0,0,0,0,15,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=15.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
 2026-09-20T16:37:59+00:00,mr,normal,natural,ALL,ONE,-,100,100,0,0,0,0,15,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=15.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
-2026-09-20T16:38:25+00:00,mr,normal,natural,ONE,ONE,-,100,100,69,0.69,0,0,20,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=20.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
+2026-09-20T16:38:25+00:00,mr,normal,natural,ONE,ONE,-,100,100,69,0.69,0,0,20,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=20.0ms",seed_cl=ALL back_to_none=0 back_to_older=69 path=node1->node2
 2026-09-20T16:38:57+00:00,mr,normal,natural,ONE,QUORUM,-,100,100,0,0,0,0,20,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=20.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
 2026-09-20T16:39:33+00:00,mr,normal,natural,QUORUM,QUORUM,-,100,100,0,0,0,0,20,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=20.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
 2026-09-20T16:40:02+00:00,mr,normal,natural,ALL,ONE,-,100,100,0,0,0,0,20,0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3 delay=20.0ms",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
