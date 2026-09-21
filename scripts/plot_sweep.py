@@ -32,8 +32,8 @@ matplotlib.rcParams["font.sans-serif"] = [
 matplotlib.rcParams["axes.unicode_minus"] = False
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "ryw"
-SRC = f"results_Luwei/{MODEL}.csv"
-OUT = f"results_Luwei/{MODEL}_delay_curves.png"
+SRC = f"results/{MODEL}.csv"
+OUT = f"results/{MODEL}_delay_curves.png"
 
 if not os.path.exists(SRC):
     sys.exit(f"找不到 {SRC} —— 先跑 ./scripts/sweep_latency.sh {MODEL}")
