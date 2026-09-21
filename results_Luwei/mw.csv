@@ -1,9 +1,0 @@
-run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,violations,violation_rate,errors,error_rate,delay_ms,jitter_ms,topology,extra
-2026-09-12T13:31:45+00:00,mw,normal,natural,ONE,ONE,ALL,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
-2026-09-12T13:34:55+00:00,mw,normal,skew,ONE,ONE,ALL,200,200,200,1.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=200 neither_visible=0 skew_us=500000 path=node2->node3
-2026-09-12T13:54:44+00:00,mw,normal,natural,ONE,QUORUM,ALL,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
-2026-09-12T13:57:47+00:00,mw,normal,skew,ONE,QUORUM,ALL,200,200,200,1.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=200 neither_visible=0 skew_us=500000 path=node2->node3
-2026-09-12T14:23:01+00:00,mw,normal,natural,QUORUM,QUORUM,ALL,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
-2026-09-12T14:27:01+00:00,mw,normal,skew,QUORUM,QUORUM,ALL,200,200,200,1.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=200 neither_visible=0 skew_us=500000 path=node2->node3
-2026-09-12T14:50:19+00:00,mw,normal,natural,ALL,ONE,ALL,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=0 neither_visible=0 skew_us=0 path=node2->node3
-2026-09-12T14:54:49+00:00,mw,normal,skew,ALL,ONE,ALL,200,200,200,1.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",W1_wins=200 neither_visible=0 skew_us=500000 path=node2->node3

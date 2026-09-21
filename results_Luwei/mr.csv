@@ -1,5 +1,0 @@
-run_ts,model,scenario,mode,write_cl,read_cl,verify_cl,iterations,triggered,violations,violation_rate,errors,error_rate,delay_ms,jitter_ms,topology,extra
-2026-09-12T13:28:22+00:00,mr,normal,natural,ONE,ONE,-,200,200,200,1.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",seed_cl=ALL back_to_none=0 back_to_older=200 path=node1->node2
-2026-09-12T13:51:40+00:00,mr,normal,natural,ONE,QUORUM,-,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
-2026-09-12T14:18:57+00:00,mr,normal,natural,QUORUM,QUORUM,-,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
-2026-09-12T14:45:48+00:00,mr,normal,natural,ALL,ONE,-,200,200,0,0.0000,0,0.0000,200.0,50.0,"running=cass1/cass2/cass3 un=cass1:3,cass2:3,cass3:3",seed_cl=ALL back_to_none=0 back_to_older=0 path=node1->node2
