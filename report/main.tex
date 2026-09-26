@@ -1,0 +1,90 @@
+% Compile with XeLaTeX (twice), or tectonic main.tex.
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage{fontspec}
+\setmainfont{lmroman10-regular.otf}[BoldFont=lmroman10-bold.otf,
+ ItalicFont=lmroman10-italic.otf,BoldItalicFont=lmroman10-bolditalic.otf]
+\setsansfont{lmsans10-regular.otf}[BoldFont=lmsans10-bold.otf,
+ ItalicFont=lmsans10-oblique.otf]
+\setmonofont{lmmono10-regular.otf}[Scale=MatchLowercase]
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx,booktabs,longtable,array,calc}
+\usepackage{caption,subcaption,float,placeins}
+\usepackage{etoolbox,titlesec,microtype,ragged2e}
+\usepackage{xcolor}
+\usepackage[unicode,hidelinks]{hyperref}
+\usepackage{bookmark,newunicodechar}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{≤}{\ensuremath{\leq}}
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{−}{\ensuremath{-}}
+\newunicodechar{μ}{\ensuremath{\mu}}
+\newunicodechar{±}{\ensuremath{\pm}}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\providecommand{\pandocbounded}[1]{#1}
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{3}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.7em}{}
+\titleformat{\paragraph}[block]{\normalsize\itshape}{\theparagraph}{0.7em}{}
+\titlespacing*{\paragraph}{0pt}{1.2ex plus .3ex}{.5ex}
+% User-selected block paragraphs: flush left, with a blank line between paragraphs.
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{\baselineskip}
+\setlength{\emergencystretch}{2em}
+\captionsetup{font=small,labelfont=bf,skip=6pt}
+\captionsetup[table]{position=top}
+\AtBeginEnvironment{longtable}{\small\renewcommand{\arraystretch}{1.15}}
+\setlength{\tabcolsep}{4pt}
+\setlength{\LTpre}{8pt}
+\setlength{\LTpost}{8pt}
+\renewcommand{\topfraction}{.95}
+\renewcommand{\bottomfraction}{.8}
+\renewcommand{\textfraction}{.05}
+\renewcommand{\floatpagefraction}{.8}
+\widowpenalty=10000
+\clubpenalty=10000
+\hypersetup{pdftitle={Consistency Models in Distributed Databases},
+ pdfauthor={Chen Luwei, Dai Peisong, Wan Sihan}}
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\centering
+\vspace*{25mm}
+{\large National University of Singapore\par}
+\vspace{15mm}
+{\large DSA5208\par}
+\vspace{3mm}
+{\large Scalable Distributed Computing for Data Science\par}
+\vspace{3mm}
+{\large Project I\par}
+\vspace{20mm}
+{\Large\bfseries\mbox{Consistency Models in Distributed Databases}\par}
+\vspace{20mm}
+{\small\mbox{Chen Luwei (A0352040X)\quad Dai Peisong (A0351174J)\quad Wan Sihan (A0356906U)}\par}
+\vfill
+{\large 26 September, 2026\par}
+\vspace*{15mm}
+\end{titlepage}
+\pagenumbering{roman}
+\hypersetup{pageanchor=true,linktoc=all}
+\pdfbookmark[0]{Contents}{contents}
+\begingroup
+\setlength{\parskip}{0pt}
+\tableofcontents
+\endgroup
+\clearpage
+\pagenumbering{arabic}
+\input{sections/introduction}
+\input{sections/ryw}
+\input{sections/mr}
+\input{sections/mw}
+\input{sections/wfr}
+\clearpage
+\input{sections/conclusion}
+\clearpage
+\appendix
+\input{sections/ai_declaration}
+\end{document}
