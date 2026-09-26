@@ -1,3 +1,9 @@
+#!/usr/bin/env bash
+# Start the 3-node cluster, create the keyspace, install the pinned driver into
+# .venv, check node pinning and record versions in results/environment.txt.
+# Safe to re-run.
+#
+# Usage: ./scripts/bootstrap.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

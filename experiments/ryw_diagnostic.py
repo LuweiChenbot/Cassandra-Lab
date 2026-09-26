@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 """
-ryw_diagnostic.py -- Diagnostic companion for ryw_test.py.
+Traced RYW diagnostic.
 
-Purpose:
-  * Keep WRITE and READ coordinators pinned exactly as in the normal RYW test.
-  * Add client-side high-resolution timing.
-  * Enable Cassandra query tracing for a SMALL number of trials.
-  * Print and save the coordinator and trace events for WRITE and READ.
+Runs ryw_test.py's write-then-read sequence for a few iterations with Cassandra
+query tracing on, and saves client-side timings and the write/read trace events
+to results/diagnostics/*.jsonl.
 
-IMPORTANT:
-  Query tracing perturbs timing. Use this script for diagnosis only, not for
-  measuring the official violation rate.
+Tracing perturbs timing: use it to explain violations, not to measure rates.
 """
 
 import argparse

@@ -1,43 +1,16 @@
 #!/usr/bin/env python3
 """
-mr_test.py -- Monotonic Reads (单调读)
+Monotonic-reads (MR) test.
 
-定义
-----
-客户端读到 x 之后, 它之后的任何读都不能返回比 x 更旧的值 —— 时间不能倒流。
+Each iteration uses a fresh key:
+  1. seed write value=1 at --seed-cl (ALL by default, so every replica has it)
+  2. write value=2 through --write-node at --write-cl
+  3. read through --read1-node, then through --read2-node, both at --read-cl
+A violation is the second read returning an older value than the first
+(e.g. 2 then 1). The seed CL is test setup, not a variable under test.
 
-实验构造
---------
-每次迭代用一个全新的 key:
-
-    1. [种子] 经 write_node 以 CL=seed_cl 写 value=1
-       => 三个副本都持有 v=1, 保证后面第一次读一定读得到东西
-    2. 经 write_node 以 CL=write_cl 写 value=2
-       => write_cl=ONE 时只有该节点确定有 v=2, 其余副本还停在 v=1
-    3. 客户端第一次读: read1_node, CL=read_cl   -> r1
-    4. 客户端第二次读: read2_node, CL=read_cl   -> r2   (客户端"换了个节点")
-    5. r2 比 r1 旧  =>  单调读违例
-
-为什么第一次读写入协调者、第二次读另一个节点
---------------------------------------------
-这不是"凑结果"。MR 要防的就是客户端连接在节点间迁移时看到时光倒流:
-负载均衡器重新路由、驱动故障转移重连、节点重启后客户端换节点。
-read1_node 是刚才写 v=2 的协调者, 必然最新; read2_node 因复制延迟还落后。
-客户端先读到 2 再读到 1, 正是这条保证存在的理由。
-
-为什么要有"种子写"
-------------------
-不种子的话, write_cl=ONE 下两个读节点大概率*都*还没有数据 (r1=r2=None),
-迭代变成无效样本, 违例率会被系统性低估到接近 0 —— 看上去"没问题",
-实际只是没测到。种子写用 CL=ALL 建立三副本共同初始状态, 把每次迭代
-都变成有效样本。种子写的 CL 是实验装置的一部分, 不是自变量。
-
-预期
-----
-    W=ONE    R=ONE     违例 (第二个节点停在 v=1)
-    W=ONE    R=QUORUM  部分违例 (法定人数是否包含最新副本是随机的)
-    W=QUORUM R=QUORUM  不违例 (2+2 > 3)
-    W=ALL    R=ONE     不违例 (3+1 > 3)
+Expected with RF=3: ONE/ONE can violate; QUORUM/QUORUM and ALL/ONE cannot.
+ONE/QUORUM (W+R = 3) is not guaranteed.
 """
 import sys
 import time
@@ -56,7 +29,7 @@ NEW_VALUE = 2
 
 
 def rank(v):
-    """None (行不存在) 排在所有实际值之前, 便于比较新旧。"""
+    """Order values for comparison; a missing row (None) is the oldest."""
     return -1 if v is None else v
 
 
@@ -125,7 +98,7 @@ def main():
             rec.update(read1_value=r1, read2_value=r2,
                        error_type=None, error_message=None)
 
-            # 只有第一次读确实观测到了某个值, 单调性义务才成立
+            # MR only applies once the first read has returned a value
             if r1 is None:
                 rec.update(triggered=False, violation=None,
                            note="first read saw nothing; obligation not triggered")

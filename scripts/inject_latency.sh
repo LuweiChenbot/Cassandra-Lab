@@ -1,26 +1,18 @@
 #!/usr/bin/env bash
-# 给节点间的*副本复制流量*注入延迟, 制造可观测的复制窗口。
+# Delay inter-node traffic (destination port 7000) on every node with tc/netem.
+# Client CQL traffic (port 9042) is not delayed, so no extra time is added
+# between a client's write and its read.
 #
-# 只延迟目的端口 7000 (Cassandra storage_port, 节点间 gossip/复制),
-# 不碰 9042 (客户端 CQL)。理由:
-#   无差别延迟会把"写完立刻读"两步之间强行拉开几百毫秒, 反而给复制留出
-#   时间窗口去完成, 违例率被系统性低估 —— 等于把要测的现象自己消掉了。
-#   我们要模拟的是"副本之间同步慢", 不是"客户端网络慢"。
+# Usage: ./scripts/inject_latency.sh                        # 200ms ± 50ms
+#        DELAY=100ms JITTER=0ms ./scripts/inject_latency.sh
 #
-# tc 队列结构 (partition.sh 依赖同一套结构):
-#
-#   root prio 1: 四个 band, priomap 全部指向 band 0
-#     ├─ 1:1  默认带, 无 qdisc     <- 未匹配的流量走这里, 完全不受影响
-#     ├─ 1:2  netem delay          <- 复制延迟          (filter prio 3)
-#     ├─ 1:3  netem loss 100%      <- 网络分区丢包      (filter prio 1)
-#     └─ 1:4  预留
-#
-# priomap 全 0 很关键: prio qdisc 默认的 priomap 会按 TOS 位把流量散到
-# 前三个 band, 那样未匹配的流量也可能落进 netem 带。全置 0 之后,
-# 只有被 filter 显式选中的流量才会被处理, 行为完全确定。
-#
-# filter 优先级: 分区(prio 1) 高于 延迟(prio 3)。所以被分区的链路直接丢包,
-# 不会先被延迟再丢。
+# qdisc layout, shared with partition.sh (priomap all 0, so unmatched traffic
+# stays in 1:1 untouched):
+#   root prio 1:
+#     1:1  default, no delay
+#     1:2  netem delay       dport 7000 (filter prio 3)
+#     1:3  netem loss 100%   partitions (filter prio 1, added by partition.sh)
+#     1:4  unused
 
 set -euo pipefail
 
@@ -40,10 +32,8 @@ for c in $NODES; do
 
   docker exec "$c" tc qdisc add dev eth0 root handle 1: prio bands 4 \
       priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-  # 抖动为 0 时必须省略 jitter 和 distribution ——
-  # netem 的 "distribution normal" 需要非零 jitter, 否则报
-  # "distribution specified but no latency and jitter values"。
-  # 延迟扫描要的正是确定性的标量延迟, 所以这条分支是常用路径而非边缘情况。
+  # netem only accepts "distribution normal" with a non-zero jitter, so drop
+  # both when JITTER is 0
   case "$JITTER" in
     0|0ms|0s|"")
       docker exec "$c" tc qdisc add dev eth0 parent 1:2 handle 20: \
@@ -56,7 +46,7 @@ for c in $NODES; do
   esac
   docker exec "$c" tc qdisc add dev eth0 parent 1:3 handle 30: \
       netem loss 100%
-  # 所有去往 storage_port 的流量 -> 延迟带
+  # traffic to storage_port -> delay band
   docker exec "$c" tc filter add dev eth0 protocol ip parent 1:0 prio 3 u32 \
       match ip dport $STORAGE_PORT 0xffff flowid 1:2
 

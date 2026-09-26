@@ -1,21 +1,12 @@
 #!/usr/bin/env python3
 """
-plot_sweep.py -- 把延迟扫描结果画成违例率曲线。
+Plot violation rate against injected delay from a latency sweep.
 
-    用法: ./.venv/bin/python scripts/plot_sweep.py [模型]
-    例:   ./.venv/bin/python scripts/plot_sweep.py ryw
+Usage: ./.venv/bin/python scripts/plot_sweep.py [model]   (default: ryw)
 
-数据来源
---------
-直接读 results/<模型>.csv, 不再解析实验脚本的终端输出。
-CSV 里已有 delay_ms 列(取自 tc 实测值), 正则解析 stdout 那层耦合就没必要了 ——
-输出格式一改, 正则就会静默匹配失败, 得到一批空值。
-
-只取扫描产生的行
-----------------
-正式矩阵那轮跑的是 200ms ± 50ms(带抖动, 贴近真实网络), 扫描跑的是
-jitter=0(确定性标量横轴)。两者目的不同, 混在一张图里会让 200ms 这个点
-出现两个不同的 y 值。这里用 jitter_ms == 0 把扫描行筛出来。
+Reads results/<model>.csv, keeps the sweep rows (normal scenario, natural mode,
+jitter 0), uses the last run of each (delay, W, R) point, and writes
+results/<model>_delay_curves.png with a 0-25 ms panel and a full-range panel.
 """
 import csv
 import os
@@ -26,7 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# 中文标签需要 CJK 字体, 否则渲染成豆腐块。按 macOS -> Linux 顺序回退。
+# CJK-capable fonts (Windows names); only needed if labels contain Chinese
 matplotlib.rcParams["font.sans-serif"] = [
     "Microsoft Yahei", "SimHei"]
 matplotlib.rcParams["axes.unicode_minus"] = False
@@ -42,7 +33,7 @@ rows = list(csv.DictReader(open(SRC, newline="")))
 
 
 def is_sweep_row(r):
-    """扫描行: jitter=0、normal 场景、natural 模式。"""
+    """Sweep rows: jitter 0, normal scenario, natural mode."""
     try:
         if float(r.get("jitter_ms") or -1) != 0.0:
             return False
@@ -52,8 +43,7 @@ def is_sweep_row(r):
     return r.get("scenario") == "normal" and r.get("mode") in ("natural", "")
 
 
-# 同一 (delay, W, R) 若跑过多次, 保留最后一次 —— CSV 是追加写入的,
-# 所以重跑之后自然覆盖旧值, 行为可预期(取平均会把坏数据掺进来)
+# if a (delay, W, R) point was run more than once, the last run wins
 points = OrderedDict()
 errors_seen = {}
 for r in rows:
@@ -64,8 +54,7 @@ for r in rows:
     if int(r.get("errors") or 0) > 0:
         errors_seen[key] = errors_seen.get(key, 0) + int(r["errors"])
 
-# 与下面的去重逻辑保持一致: 取最后一条扫描行的迭代数。
-# 取第一条会在重跑后显示旧的(更小的)n, 与曲线实际依据的数据不符。
+# n in the title comes from the last sweep row, matching the last-run-wins rule
 _sweep_rows = [r for r in rows if is_sweep_row(r)]
 N_ITER = _sweep_rows[-1]["iterations"] if _sweep_rows else "?"
 
@@ -73,9 +62,7 @@ if not points:
     sys.exit(f"{SRC} 里没有扫描数据(jitter=0 的行) —— 先跑 "
              f"./scripts/sweep_latency.sh {MODEL}")
 
-# 双面板: 全量程线性横轴会把拐点压成一根垂直线 ——
-# RYW 的过渡区在 0-2ms(客户端往返的时间尺度), 而量程要到 800ms 才能
-# 看出饱和与零线。单张图无法同时呈现这两个尺度。
+# two panels: most of the change happens below ~20 ms, but the sweep runs to 800 ms
 ZOOM_MAX = 25.0
 fig, (ax_zoom, ax_full) = plt.subplots(1, 2, figsize=(13, 5.2))
 
