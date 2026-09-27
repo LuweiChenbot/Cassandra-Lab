@@ -1,12 +1,19 @@
 \section{AI Tool Declaration}\label{app:ai-declaration}
 
-We acknowledge the use of Claude (Anthropic) and ChatGPT/Codex (OpenAI) in preparing this project. These tools were used for assistance with implementation, visualisation, and report preparation, as described below.
+We acknowledge the use of Claude (Anthropic), mainly through the Claude Code coding assistant, and ChatGPT/Codex (OpenAI) in preparing this project. These tools assisted with implementation, experiment runs, visualisation, documentation and report preparation, as described below.
 
 \subsection*{Claude}
-Claude assisted with developing the Cassandra experiment infrastructure and framework, including the three-node Docker configuration, node-pinned client sessions, parameterised consistency tests, timestamp-inversion tests, and internode latency-injection scripts. The repository's initial framework commit explicitly credits ``Claude Opus 5'' in its co-author attribution. This attribution can be inspected in \href{https://github.com/LuweiChenbot/Cassandra-Lab/commit/261a1f4a33a35dfb7b4157cd4addb2c38258370b}{commit \texttt{261a1f4}} of the project repository.
+Claude assisted with:
+\begin{itemize}
+  \item the experiment infrastructure: the three-node Docker configuration, node-pinned client sessions, the parameterised consistency tests, the timestamp-inversion tests, the pre-run topology check, and the inter-node latency and partition scripts;
+  \item the experiment-matrix and latency-sweep scripts, the sweep plotting script, and some experiment runs during development;
+  \item project documentation, including the README and the code comments and docstrings;
+  \item a review of the repository and this report against the assignment requirements before submission, including checking reported figures against the result files.
+\end{itemize}
+Commits made through Claude Code carry a \texttt{Co-Authored-By} trailer naming Claude. Instead of listing them here, we refer to the project's Git history, where the complete and up-to-date list can be retrieved with \texttt{git log -i -{}-grep="co-authored-by: claude"}.
 
 \subsection*{ChatGPT/Codex}
-ChatGPT/Codex was used as an supporting tool for proofreading grammatical errors in the report, improving formatting and presentation, reviewing the project code for consistency with the assignment requirements, and refining the clarity, organisation, and expression of the written report.
+ChatGPT/Codex was used as a supporting tool for proofreading grammatical errors in the report, improving formatting and presentation, reviewing the project code for consistency with the assignment requirements, and refining the clarity, organisation, and expression of the written report.
 
 \subsection*{Responsibility for the submission}
 AI assistance does not replace experimental evidence, database documentation, or the authors' responsibility for scientific judgement. The reported measurements must be supported by the experiment outputs and not by AI-generated assertions. We are responsible for checking AI-assisted code, interpretations, references, and written material, and for the content, accuracy, originality, and quality of the submitted work.
