@@ -89,7 +89,7 @@ ALL-ONE & ALL & 0\% at every delay & 100\% at every delay \\
 \end{table}
 }
 
-Detailed records can be found in \href{https://github.com/LuweiChenbot/Cassandra-Lab/blob/main/results/mw_windows.csv}{monotonic-write-records}. The two modes separate propagation delay from timestamp ordering. In natural mode, delayed delivery does not prevent the later write from winning reconciliation. In skew mode, the earlier write consistently wins because its assigned timestamp is larger. The result remains unchanged even when all replicas acknowledge both writes: stronger acknowledgements do not repair an inversion between application order and timestamp order.
+Detailed records can be found in \href{https://github.com/LuweiChenbot/Cassandra-Lab/blob/main/results/mw.csv}{monotonic-write-records}. The two modes separate propagation delay from timestamp ordering. In natural mode, delayed delivery does not prevent the later write from winning reconciliation. In skew mode, the earlier write consistently wins because its assigned timestamp is larger. The result remains unchanged even when all replicas acknowledge both writes: stronger acknowledgements do not repair an inversion between application order and timestamp order.
 
 The 500 ms skew is a difference between two assigned timestamps, not a waiting period. Therefore, increasing network delay beyond 500 ms does not remove the inversion; t1 remains greater than t2 regardless of elapsed execution time.
 

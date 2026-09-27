@@ -13,3 +13,4 @@ __pycache__/
 # 实验结果里的临时/草稿文件（正式结果 results/*.csv 是要提交的）
 results/*.tmp
 results/scratch*
+*.log
