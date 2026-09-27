@@ -85,6 +85,52 @@
 \clearpage
 \input{sections/conclusion}
 \clearpage
+\begingroup
+\small
+\setlength{\parskip}{3pt}
+\begin{thebibliography}{9}
+\phantomsection
+\addcontentsline{toc}{section}{References}
+\bibitem{terry1994}
+D.~B. Terry, A.~J. Demers, K. Petersen, M.~J. Spreitzer, M.~M. Theimer, and B.~B. Welch.
+Session Guarantees for Weakly Consistent Replicated Data.
+In \emph{Proceedings of the Third International Conference on Parallel and Distributed Information Systems}, pp.~140--149, 1994.
+\href{https://doi.org/10.1109/PDIS.1994.331722}{doi:10.1109/PDIS.1994.331722}.
+
+\bibitem{cassandra-dynamo}
+Apache Software Foundation.
+Dynamo: Tunable Consistency. \emph{Apache Cassandra 4.1 Documentation}.
+\href{https://cassandra.apache.org/doc/4.1/cassandra/architecture/dynamo.html}{Online documentation}. Accessed 27 September 2026.
+
+\bibitem{cassandra-read-repair}
+Apache Software Foundation.
+Read Repair. \emph{Apache Cassandra 4.1 Documentation}.
+\href{https://cassandra.apache.org/doc/4.1/cassandra/operating/read_repair.html}{Online documentation}. Accessed 27 September 2026.
+
+\bibitem{cassandra-ddl}
+Apache Software Foundation.
+Data Definition: Table Options and Speculative Retry. \emph{Apache Cassandra 4.1 Documentation}.
+\href{https://cassandra.apache.org/doc/4.1/cassandra/cql/ddl.html}{Online documentation}. Accessed 27 September 2026.
+
+\bibitem{driver-timestamps}
+DataStax.
+\texttt{cassandra.cluster}: Clusters and Sessions; \texttt{timestamp\_generator}.
+\emph{Python Driver 3.29 API Documentation}.
+\href{https://docs.datastax.com/en/developer/python-driver/3.29/api/cassandra/cluster/index.html}{Online documentation}. Accessed 27 September 2026.
+
+\bibitem{driver-policies}
+DataStax.
+\texttt{cassandra.policies}: Load-Balancing Policies; \texttt{WhiteListRoundRobinPolicy}.
+\emph{Python Driver 3.29 API Documentation}.
+\href{https://docs.datastax.com/en/developer/python-driver/3.29/api/cassandra/policies/index.html}{Online documentation}. Accessed 27 September 2026.
+
+\bibitem{tc-netem}
+iproute2 project.
+\texttt{tc-netem(8)}: Network Emulator. \emph{Linux Manual Pages}.
+\href{https://www.man7.org/linux/man-pages/man8/netem.8.html}{Online manual}. Accessed 27 September 2026.
+\end{thebibliography}
+\endgroup
+\clearpage
 \appendix
 \input{sections/ai_declaration}
 \end{document}
