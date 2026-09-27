@@ -8,13 +8,38 @@ Our experiment examines an observable consequence of this dependency: whether a 
 
 \subsubsection{Experimental Design}\label{wfr:experimental-design}
 
-Each iteration uses a fresh key. A setup write first stores \(x=1\), followed by a preceding write \(W_b\) that stores \(x=2\). The client then reads the key through another coordinator and issues a dependent write \(x=r+10\), where \(r\) is the observed value. Under the normal topology, the preceding writes use cass1, the client read uses cass2, and the dependent write uses cass3. A final verification read through cass1 identifies the winning version.
+Each iteration uses a fresh key. A setup write $W_a$ first stores $x=1$, followed by a preceding write $W_b$ that stores $x=2$. The client then reads the key and issues a dependent write $x=r+10$, where $r$ is the observed value. A final verification read identifies the winning version. The coordinator paths and setup and verification consistency levels vary with the topology, as specified in Table~\ref{tab:wfr-topology}.
 
-If the client reads \(r=2\), it has observed \(W_b\), and the dependent write stores \(x=12\). This establishes the dependency tested by the experiment. A final value of 12 indicates that the dependent update was preserved; a final value of 2 indicates that the preceding write remained the winner despite the later dependent update. If the client reads \(r=1\), the trial is recorded as a stale read and excluded from the violation rate for the dependency on \(W_b\).
+If the client reads $r=2$, it has observed $W_b$, and the dependent write stores $x=12$. This establishes the dependency tested by the experiment. A final value of 12 indicates that the dependent update was preserved; a final value of 2 indicates that the preceding write remained the winner despite the later dependent update. If the client reads $r=1$, the trial is recorded as a stale read and excluded from the violation rate for the dependency on $W_b$.
 
-Two timestamp modes are compared. Natural mode uses ordinary driver-generated timestamps. In skew mode, \(W_b\) receives a future-dated timestamp intended to exceed that of the subsequent dependent write. The original scenario matrix used a five-second offset and recorded whether that offset was sufficient to produce the intended timestamp inversion.
+Two modes are used. In natural mode, writes use ordinary driver-generated timestamps, and $W_b$ uses the selected write CL. In skew mode, $W_b$ receives a future-dated timestamp and uses the verification CL listed in Table~\ref{tab:wfr-topology}, establishing its visibility within the participating component before the trigger read. In both modes, the trigger read uses the selected read CL, while the dependent write uses the selected write CL and a driver-generated timestamp. The original scenario matrix used a five-second timestamp offset and recorded whether it was sufficient to produce the intended inversion. Thus, the modes differ in both timestamp assignment and the CL used for $W_b$; their trigger rates should not be interpreted as a comparison that changes timestamps alone.
 
-The scenario matrix contains 64 configurations: two delay/jitter settings, four operational scenarios, four write/read CL combinations, and two timestamp modes. Each configuration has 100 attempted iterations. The operational scenarios are normal operation, single-node failure, majority partition, and minority partition; the network settings are 0/0 ms and 100/50 ms delay/jitter.
+The scenario matrix contains 64 configurations: two delay/jitter settings, four operational scenarios, four write/read CL combinations, and two modes. Each configuration has 100 attempted iterations. The operational scenarios are normal operation, single-node failure, majority partition, and minority partition; the network settings are 0/0 ms and 100/50 ms delay/jitter.
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\caption{WFR setup and verification configurations by topology. In the coordinator path, node numbers denote cass1, cass2, and cass3; the order is $W_a/W_b$, trigger read, dependent write, and verification read.}
+\label{tab:wfr-topology}
+\begin{tabular}{@{}
+>{\RaggedRight\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.24}}
+>{\RaggedRight\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.14}}
+>{\RaggedRight\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.17}}
+>{\RaggedRight\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.29}}
+>{\RaggedRight\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.16}}@{}}
+\toprule
+Scenario & Setup CL & Verification CL & Coordinator path & Settle time (ms) \\
+\midrule
+Normal & ALL & ALL & $1\to2\to3\to1$ & 0 \\
+Node failure & QUORUM & QUORUM & $1\to2\to1\to1$ & 1000 \\
+Majority partition & QUORUM & QUORUM & $1\to2\to1\to1$ & 1000 \\
+Minority partition & ONE & ONE & $3\to3\to3\to3$ & 1000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No additional client-side sleep is inserted between $W_b$ and the trigger read. The settling interval in Table~\ref{tab:wfr-topology} occurs only after the dependent write and before verification. Verification covers all three replicas in the normal topology, the two reachable replicas under node failure or majority partition, and only cass3 in the minority partition. The fixed settling interval is not itself proof of convergence, and partition-local verification does not establish convergence across the partition.
 
 The additional delay plots present natural and skew results at 0, 5, 10, 20, and 50 ms with zero configured jitter. These scanning results are discussed separately from the scenario matrix.
 
@@ -39,7 +64,7 @@ Operation errors, including unavailable and timeout outcomes, are recorded separ
 
 A configuration with no triggered trials has an undefined violation rate, not a measured rate of 0\%. Such points must therefore appear as gaps in the plots.
 
-With RF=3, QUORUM/QUORUM and ALL/ONE satisfy \(R+W>N\), whereas ONE/ONE and ONE/QUORUM do not. Replica overlap helps explain whether the client observes \(W_b\), but it does not determine the ordering of timestamps assigned to competing writes. Even if every replica receives the dependent update, Cassandra's last-write-wins reconciliation can retain \(W_b\) when its timestamp is greater.
+For the preceding write and trigger read in natural mode, with RF=3, QUORUM/QUORUM and ALL/ONE satisfy \(R+W>N\), whereas ONE/ONE and ONE/QUORUM do not. Replica overlap helps explain whether the client observes \(W_b\), but it does not determine the ordering of timestamps assigned to competing writes. Even if every replica receives the dependent update, Cassandra's last-write-wins reconciliation can retain \(W_b\) when its timestamp is greater.
 
 \subsubsection{Predicted Outcomes}\label{wfr:predicted-outcomes}
 
