@@ -47,12 +47,12 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
     wb_cl = v_cl if mode == "skew" else w_cl  # skew: W_b written at verify-cl
     wb_cl_name = args.verify_cl if mode == "skew" else args.write_cl
 
-    print(f"\n--- 模式 {mode}: W_a@{args.setup_cl} -> W_b@{wb_cl_name} "
+    print(f"\n--- mode {mode}: W_a@{args.setup_cl} -> W_b@{wb_cl_name} "
           f"-> read node{args.read_node}@{args.read_cl} "
           f"-> client write node{args.client_node}@{args.write_cl} ---")
     if mode == "skew":
-        print(f"    构造客户端时间戳倒挂 {args.skew_us} us "
-              f"(W_b 时间戳 = base+{args.skew_us})")
+        print(f"    client timestamp inversion of {args.skew_us} us "
+              f"(W_b timestamp = base+{args.skew_us})")
 
     trace = TraceWriter(MODEL, args.scenario, mode,
                         args.write_cl, args.read_cl, run_id,
@@ -103,7 +103,7 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
                            triggered=False, violation=None)
                 trace.write(**rec)
                 if errors <= 3:
-                    print(f"    [异常 {type(e).__name__}] {str(e)[:90]}")
+                    print(f"    [error {type(e).__name__}] {str(e)[:90]}")
                 continue
 
             elapsed_sum += t_client - base
@@ -145,9 +145,9 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
 
             if i % step == 0:
                 rate = violations / triggered if triggered else 0
-                print(f"    [{i:>5}/{args.iterations}] 有效 {triggered:>5} "
-                      f"违例 {violations:>5} ({rate:.1%})  "
-                      f"陈旧读 {stale_trigger}  异常 {errors}")
+                print(f"    [{i:>5}/{args.iterations}] valid {triggered:>5} "
+                      f"violations {violations:>5} ({rate:.1%})  "
+                      f"stale reads {stale_trigger}  errors {errors}")
     finally:
         trace.close()
 
@@ -168,21 +168,21 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
 def main():
     p = build_parser(MODEL)
     p.add_argument("--verify-cl", default="ALL",
-                   help="收敛后校验用的读级别; skew 模式也用它写 W_b")
+                   help="read level for the final check; skew mode also writes W_b at this level")
     p.add_argument("--mode", default="both", choices=["natural", "skew", "both"])
     p.add_argument("--skew-us", type=int, default=5_000_000,
-                   help="构造的客户端时间戳偏移(微秒), 默认 5000000 = 5s。"
-                        "必须大于 W_b 到客户端后续写之间的实际间隔, "
-                        "否则客户端的自然时间戳反而更高, 违例无法成立。"
-                        "注入 200ms 复制延迟后该间隔实测约 1.1-1.4s。")
-    p.add_argument("--setup-cl", default="ALL", help="W_a 装置写的一致性级别")
-    p.add_argument("--write-node", type=int, default=1, help="W_a / W_b 的协调者")
-    p.add_argument("--read-node", type=int, default=2, help="客户端读的节点")
-    p.add_argument("--client-node", type=int, default=3, help="客户端写的节点")
-    p.add_argument("--verify-node", type=int, default=1, help="收敛校验读的节点")
+                   help="client timestamp skew in microseconds, default 5000000 = 5 s. "
+                        "Must exceed the time from W_b to the client's write, "
+                        "otherwise the client's own timestamp is later and no violation can occur "
+                        "(about 1.1-1.4 s with 200 ms injected delay).")
+    p.add_argument("--setup-cl", default="ALL", help="consistency level for the W_a setup write")
+    p.add_argument("--write-node", type=int, default=1, help="coordinator for W_a and W_b")
+    p.add_argument("--read-node", type=int, default=2, help="node for the client's read")
+    p.add_argument("--client-node", type=int, default=3, help="node for the client's write")
+    p.add_argument("--verify-node", type=int, default=1, help="node for the final check")
     p.add_argument("--settle-ms", type=float, default=0.0,
-                   help="校验读之前的收敛等待(毫秒), 不影响触发 WFR 义务的那次读。"
-                        "verify-cl 降级到 QUORUM 的故障/分区场景建议 1000。")
+                   help="wait before the final check in ms; the client's read is not delayed. "
+                        "Use 1000 when verify-cl drops to QUORUM (node failure, partition).")
     args = p.parse_args()
 
     validate(args, {"--write-node": args.write_node,
@@ -194,7 +194,7 @@ def main():
     s_cl, v_cl = cl(args.setup_cl), cl(args.verify_cl)
 
     print(f"\n=== WFR: W={args.write_cl}  R={args.read_cl}  verify={args.verify_cl}  "
-          f"n={args.iterations}  场景={args.scenario} ===")
+          f"n={args.iterations}  scenario={args.scenario} ===")
 
     topo = topology.enforce(args.scenario, args.skip_topology_check)
     nodes = connect_nodes(parse_nodes(args.nodes))

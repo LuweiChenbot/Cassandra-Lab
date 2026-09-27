@@ -10,9 +10,9 @@ for c in $NODES; do
     docker exec "$c" tc filter del dev eth0 parent 1:0 prio 1 2>/dev/null || break
     removed=$((removed+1))
   done
-  echo "[$c] 移除分区 filter ${removed} 组"
+  echo "[$c] removed ${removed} partition filter(s)"
 done
 echo
-echo "等待 gossip 恢复 (约 25 秒) ..."
+echo "Waiting for gossip to recover (~25 s) ..."
 sleep 25
 docker exec cass1 nodetool status 2>&1 | grep -E '^[UD][NLJM]' | sed 's/^/    /'

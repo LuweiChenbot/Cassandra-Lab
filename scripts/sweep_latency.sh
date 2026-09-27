@@ -28,13 +28,13 @@ observed_delay() {
 }
 
 echo "==================================================================="
-echo " 延迟扫描  模型=$MODEL  n=$N  延迟点=${DELAYS[*]} ms  jitter=0"
+echo " delay sweep  model=$MODEL  n=$N  delays=${DELAYS[*]} ms  jitter=0"
 echo "==================================================================="
 
 for d in "${DELAYS[@]}"; do
   echo
   echo "###################################################################"
-  echo "### 延迟 = ${d} ms"
+  echo "### delay = ${d} ms"
   echo "###################################################################"
 
   if [ "$d" = "0" ]; then
@@ -49,15 +49,15 @@ for d in "${DELAYS[@]}"; do
   for c in cass1 cass2 cass3; do
     got=$(observed_delay "$c"); got="${got:-0}"
     if [ "$got" != "$d" ]; then
-      echo "  ! $c 实测延迟 ${got}ms != 目标 ${d}ms" >&2
+      echo "  ! $c applied delay ${got}ms != target ${d}ms" >&2
       ok=0
     fi
   done
   if [ "$ok" != "1" ]; then
-    echo "  延迟注入未按预期生效, 中止扫描。" >&2
+    echo "  delay injection did not take effect, stopping the sweep." >&2
     exit 1
   fi
-  echo "  [已验证] 三节点实测延迟均为 ${d}ms"
+  echo "  [checked] all three nodes apply ${d}ms"
 
   for combo in "${COMBOS[@]}"; do
     w="${combo% *}"; r="${combo#* }"
@@ -65,11 +65,11 @@ for d in "${DELAYS[@]}"; do
     echo "--- $MODEL  W=$w  R=$r  delay=${d}ms ---"
     $PY "experiments/${MODEL}_test.py" \
         --scenario normal --write-cl "$w" --read-cl "$r" -n "$N" --no-trace \
-      || echo "    [该组合非零退出, 继续]"
+      || echo "    [exited non-zero, continuing]"
   done
 done
 
 echo
 echo "==================================================================="
-echo " 扫描完成。按 (write_cl, read_cl) 分组、delay_ms 为横轴出图。"
+echo " sweep done. Plot with ./.venv/bin/python scripts/plot_sweep.py $MODEL"
 echo "==================================================================="

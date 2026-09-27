@@ -36,10 +36,10 @@ def rank(v):
 def main():
     p = build_parser(MODEL)
     p.add_argument("--seed-cl", default="ALL",
-                   help="种子写的一致性级别 (实验装置; 故障/分区场景下降为 QUORUM)")
-    p.add_argument("--write-node", type=int, default=1, help="两次写的协调者")
-    p.add_argument("--read1-node", type=int, default=1, help="客户端第一次读的节点")
-    p.add_argument("--read2-node", type=int, default=2, help="客户端第二次读的节点")
+                   help="seed write consistency level (test setup; QUORUM with a node down)")
+    p.add_argument("--write-node", type=int, default=1, help="coordinator for both writes")
+    p.add_argument("--read1-node", type=int, default=1, help="node for the first read")
+    p.add_argument("--read2-node", type=int, default=2, help="node for the second read")
     args = p.parse_args()
 
     validate(args, {"--write-node": args.write_node,
@@ -51,7 +51,7 @@ def main():
 
     print(f"\n=== MR: seed={args.seed_cl}  W={args.write_cl}@node{args.write_node}  "
           f"R={args.read_cl} (node{args.read1_node} -> node{args.read2_node})  "
-          f"n={args.iterations}  场景={args.scenario} ===")
+          f"n={args.iterations}  scenario={args.scenario} ===")
 
     topo = topology.enforce(args.scenario, args.skip_topology_check)
     nodes = connect_nodes(parse_nodes(args.nodes))
@@ -92,7 +92,7 @@ def main():
                            triggered=False, violation=None)
                 trace.write(**rec)
                 if errors <= 3:
-                    print(f"    [异常 {type(e).__name__}] {str(e)[:90]}")
+                    print(f"    [error {type(e).__name__}] {str(e)[:90]}")
                 continue
 
             rec.update(read1_value=r1, read2_value=r2,
@@ -118,8 +118,8 @@ def main():
 
             if i % step == 0:
                 rate = violations / triggered if triggered else 0
-                print(f"    [{i:>5}/{args.iterations}] 违例 {violations:>5} "
-                      f"({rate:.1%})  异常 {errors}")
+                print(f"    [{i:>5}/{args.iterations}] violations {violations:>5} "
+                      f"({rate:.1%})  errors {errors}")
     finally:
         trace.close()
         for nd in nodes.values():

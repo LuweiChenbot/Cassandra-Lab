@@ -40,11 +40,11 @@ def run_mode(mode, nodes, args, w_cl, v_cl, topo):
     vn = nodes[args.verify_node]
     run_id = time.strftime("%H%M%S")
 
-    print(f"\n--- 模式 {mode}: W1@node{args.write1_node} -> W2@node{args.write2_node}, "
+    print(f"\n--- mode {mode}: W1@node{args.write1_node} -> W2@node{args.write2_node}, "
           f"verify@node{args.verify_node} CL={args.verify_cl} ---")
     if mode == "skew":
-        print(f"    构造客户端时间戳倒挂 {args.skew_us} us "
-              f"(W1 时间戳 = base+{args.skew_us}, W2 时间戳 = base)")
+        print(f"    client timestamp inversion of {args.skew_us} us "
+              f"(W1 timestamp = base+{args.skew_us}, W2 timestamp = base)")
 
     trace = TraceWriter(MODEL, args.scenario, mode,
                         args.write_cl, args.read_cl, run_id,
@@ -86,7 +86,7 @@ def run_mode(mode, nodes, args, w_cl, v_cl, topo):
                            triggered=False, violation=None)
                 trace.write(**rec)
                 if errors <= 3:
-                    print(f"    [异常 {type(e).__name__}] {str(e)[:90]}")
+                    print(f"    [error {type(e).__name__}] {str(e)[:90]}")
                 continue
 
             triggered += 1
@@ -105,8 +105,8 @@ def run_mode(mode, nodes, args, w_cl, v_cl, topo):
 
             if i % step == 0:
                 rate = violations / triggered if triggered else 0
-                print(f"    [{i:>5}/{args.iterations}] 违例 {violations:>5} "
-                      f"({rate:.1%})  异常 {errors}")
+                print(f"    [{i:>5}/{args.iterations}] violations {violations:>5} "
+                      f"({rate:.1%})  errors {errors}")
     finally:
         trace.close()
 
@@ -124,19 +124,19 @@ def run_mode(mode, nodes, args, w_cl, v_cl, topo):
 def main():
     p = build_parser(MODEL)
     p.add_argument("--verify-cl", default="ALL",
-                   help="收敛后校验用的读级别 (判定最终定序需要看全副本)")
+                   help="read level for the final check (ALL sees every replica)")
     p.add_argument("--mode", default="both", choices=["natural", "skew", "both"])
     p.add_argument("--skew-us", type=int, default=500_000,
-                   help="构造的客户端时间戳偏移(微秒), 默认 500000 = 500ms。"
-                        "MW 的两次写都用显式时间戳, 二者差值恒为 skew, "
-                        "不受迭代耗时影响。")
-    p.add_argument("--write1-node", type=int, default=2, help="W1 的协调者")
-    p.add_argument("--write2-node", type=int, default=3, help="W2 的协调者")
-    p.add_argument("--verify-node", type=int, default=1, help="收敛校验读的节点")
+                   help="client timestamp skew in microseconds, default 500000 = 500 ms. "
+                        "Both MW writes use explicit timestamps, so their gap is always the skew "
+                        "regardless of iteration time.")
+    p.add_argument("--write1-node", type=int, default=2, help="coordinator for W1")
+    p.add_argument("--write2-node", type=int, default=3, help="coordinator for W2")
+    p.add_argument("--verify-node", type=int, default=1, help="node for the final check")
     p.add_argument("--settle-ms", type=float, default=0.0,
-                   help="校验读之前的收敛等待(毫秒)。verify-cl=ALL 时无需设置; "
-                        "降级到 QUORUM 的故障/分区场景建议 1000, "
-                        "否则可见性滞后会被误判成定序违例。")
+                   help="wait before the final check in ms. Not needed with verify-cl=ALL; "
+                        "use 1000 with QUORUM (node failure, partition), "
+                        "or replication lag is counted as an ordering violation.")
     args = p.parse_args()
 
     validate(args, {"--write1-node": args.write1_node,
@@ -146,8 +146,8 @@ def main():
     w_cl, v_cl = cl(args.write_cl), cl(args.verify_cl)
 
     print(f"\n=== MW: W={args.write_cl}  verify={args.verify_cl}  "
-          f"n={args.iterations}  场景={args.scenario} ===")
-    print("    注意: MW 由写时间戳定序, read_cl 不参与判定, 仅记录以对齐矩阵。")
+          f"n={args.iterations}  scenario={args.scenario} ===")
+    print("    note: MW is ordered by write timestamps; read_cl is recorded but not used.")
 
     topo = topology.enforce(args.scenario, args.skip_topology_check)
     nodes = connect_nodes(parse_nodes(args.nodes))

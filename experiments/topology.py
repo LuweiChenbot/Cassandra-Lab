@@ -110,17 +110,17 @@ def format_snapshot(snap):
     for c in sorted(snap["nodes"]):
         d = snap["nodes"][c]
         if not d.get("running"):
-            lines.append(f"    {c}: 容器未运行")
+            lines.append(f"    {c}: not running")
             continue
         ring = d.get("ring") or {}
-        seen = ", ".join(f"{ip}={st}" for ip, st in sorted(ring.items())) or "(取不到)"
+        seen = ", ".join(f"{ip}={st}" for ip, st in sorted(ring.items())) or "(unavailable)"
         tc = d["tc"]
         flags = []
         if tc["delay"]:
-            flags.append("延迟")
+            flags.append("delay")
         if tc["partition_filters"]:
-            flags.append(f"分区filter×{tc['partition_filters']}")
-        lines.append(f"    {c}: 环内所见 [{seen}]  netem[{'+'.join(flags) or '无'}]")
+            flags.append(f"partition filters x{tc['partition_filters']}")
+        lines.append(f"    {c}: ring view [{seen}]  netem[{'+'.join(flags) or 'none'}]")
     return "\n".join(lines)
 
 
@@ -134,53 +134,53 @@ def check_scenario(scenario, strict=True):
     problems = []
 
     if not running:
-        problems.append("一个 Cassandra 容器都没在跑 —— 先执行 docker compose up -d --wait")
+        problems.append("no Cassandra container is running; run docker compose up -d --wait first")
         return snap, problems
 
     if scenario == "normal":
         if len(running) != 3:
             problems.append(
-                f"声明 normal 但只有 {len(running)} 个容器在跑 ({sorted(running)})。"
-                "正常场景应当三个都在。")
+                f"scenario is normal but only {len(running)} containers are running ({sorted(running)}). "
+                "All three should be up.")
         bad = {c: n for c, n in uns.items() if n != 3}
         if bad:
-            problems.append(f"声明 normal 但这些节点没看到 3 个 UN: {bad}")
+            problems.append(f"scenario is normal but these nodes do not see 3 UN: {bad}")
         if part:
             problems.append(
-                f"声明 normal 但检测到 {part} 条分区 filter —— "
-                "先跑 ./scripts/heal_partition.sh")
+                f"scenario is normal but {part} partition filters are present; "
+                "run ./scripts/heal_partition.sh first")
 
     elif scenario == "node_failure":
         if len(running) == 3:
             problems.append(
-                "声明 node_failure 但三个容器都在跑。"
-                "请先 docker stop cass3 (或其他节点)。")
+                "scenario is node_failure but all three containers are running. "
+                "Run docker stop cass3 (or another node) first.")
         elif len(running) < 2:
             problems.append(
-                f"声明 node_failure 但只剩 {len(running)} 个容器 —— "
-                "RF=3 下停掉两个节点连 QUORUM 都不可用, 不是本实验预期的场景。")
+                f"scenario is node_failure but only {len(running)} containers are left; "
+                "with two nodes down even QUORUM fails at RF=3, which this test does not cover.")
         alive = {c: n for c, n in uns.items() if n >= 3}
         if alive:
             problems.append(
-                f"这些节点仍看到 3 个 UN: {alive} —— "
-                "gossip 可能还没标记故障, 等 15 秒再试。")
+                f"these nodes still see 3 UN: {alive}; "
+                "gossip may not have marked the failure yet, retry in 15 s.")
 
     elif scenario == "partition":
         if len(running) != 3:
             problems.append(
-                f"声明 partition 但只有 {len(running)} 个容器在跑。"
-                "网络分区场景下进程应当全部存活, 只是互相通信被切断。")
+                f"scenario is partition but only {len(running)} containers are running. "
+                "In a partition all processes stay up; only their traffic is cut.")
         if part == 0:
             problems.append(
-                "声明 partition 但没检测到任何分区 filter —— "
-                "先跑 ./scripts/partition.sh cass3")
+                "scenario is partition but no partition filter was found; "
+                "run ./scripts/partition.sh cass3 first")
 
     elif scenario in ("smoke", "probe"):
         pass                                     # debugging scenarios, not checked
 
     else:
         problems.append(
-            f"未知场景 {scenario!r}。可选: {', '.join(VALID_SCENARIOS)}")
+            f"unknown scenario {scenario!r}; choose from {', '.join(VALID_SCENARIOS)}")
 
     return snap, problems
 
@@ -192,18 +192,18 @@ LAST_NETEM = {"delay_ms": "", "jitter_ms": ""}
 def enforce(scenario, skip=False):
     """Print the topology and exit on a mismatch; returns a one-line summary for the CSV."""
     snap, problems = check_scenario(scenario)
-    print(f"  [拓扑自检] 场景={scenario}")
+    print(f"  [topology check] scenario={scenario}")
     print(format_snapshot(snap))
     if problems:
         if skip:
-            print("  [拓扑自检] 检测到不一致, 但 --skip-topology-check 已指定, 继续:")
+            print("  [topology check] mismatch, continuing because of --skip-topology-check:")
             for p in problems:
                 print(f"      ! {p}")
         else:
-            print("\n  [拓扑自检] 实际拓扑与声明的场景不符, 已中止:")
+            print("\n  [topology check] live topology does not match the scenario, stopping:")
             for p in problems:
                 print(f"      ! {p}")
-            print("\n  确认无误想强制继续, 加 --skip-topology-check\n")
+            print("\n  To run anyway, add --skip-topology-check\n")
             raise SystemExit(2)
     # every node should report the same netem values; otherwise record MIXED[...]
     delays = sorted({d["tc"]["delay_ms"] for d in snap["nodes"].values()
@@ -213,8 +213,8 @@ def enforce(scenario, skip=False):
     LAST_NETEM["delay_ms"] = delays[0] if len(delays) == 1 else f"MIXED{delays}"
     LAST_NETEM["jitter_ms"] = jitters[0] if len(jitters) == 1 else f"MIXED{jitters}"
     if len(delays) > 1:
-        print(f"  [拓扑自检] 警告: 各节点 netem 延迟不一致 {delays} —— "
-              f"重跑 ./scripts/inject_latency.sh")
+        print(f"  [topology check] warning: nodes report different netem delays {delays}; "
+              f"re-run ./scripts/inject_latency.sh")
 
     uns = un_counts(snap)
     return (f"running={'/'.join(snap['running'])} "

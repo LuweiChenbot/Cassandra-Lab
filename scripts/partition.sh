@@ -17,7 +17,7 @@ ip_of() {
 
 # requires the prio qdisc from inject_latency.sh
 if ! docker exec "$TARGET" tc qdisc show dev eth0 | grep -q 'prio 1:'; then
-  echo "错误: $TARGET 上没有 tc 队列结构。先跑 ./scripts/inject_latency.sh" >&2
+  echo "error: $TARGET has no tc qdisc. Run ./scripts/inject_latency.sh first" >&2
   exit 1
 fi
 
@@ -25,7 +25,7 @@ OTHERS=""
 for c in $ALL_NODES; do [ "$c" = "$TARGET" ] || OTHERS="$OTHERS $c"; done
 
 TARGET_IP=$(ip_of "$TARGET")
-echo "隔离 $TARGET ($TARGET_IP)，切断其与[$OTHERS ] 的 :$STORAGE_PORT 通信"
+echo "Isolating $TARGET ($TARGET_IP) from [$OTHERS ] on :$STORAGE_PORT"
 echo
 
 # target -> peers
@@ -33,25 +33,25 @@ for c in $OTHERS; do
   peer_ip=$(ip_of "$c")
   docker exec "$TARGET" tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 \
       match ip dst "$peer_ip"/32 match ip dport $STORAGE_PORT 0xffff flowid 1:3
-  echo "  [$TARGET] 丢弃 -> $c ($peer_ip):$STORAGE_PORT"
+  echo "  [$TARGET] drop -> $c ($peer_ip):$STORAGE_PORT"
 done
 
 # peers -> target (without this the partition would be one-way)
 for c in $OTHERS; do
   docker exec "$c" tc filter add dev eth0 protocol ip parent 1:0 prio 1 u32 \
       match ip dst "$TARGET_IP"/32 match ip dport $STORAGE_PORT 0xffff flowid 1:3
-  echo "  [$c] 丢弃 -> $TARGET ($TARGET_IP):$STORAGE_PORT"
+  echo "  [$c] drop -> $TARGET ($TARGET_IP):$STORAGE_PORT"
 done
 
 echo
-echo "等待 gossip 收敛 (约 20 秒) ..."
+echo "Waiting for gossip to converge (~20 s) ..."
 sleep 20
 echo
 for c in $ALL_NODES; do
-  echo "--- $c 眼中的环 ---"
+  echo "--- ring as seen by $c ---"
   docker exec "$c" nodetool status 2>/dev/null | grep -E '^[UD][NLJM]' | sed 's/^/    /' \
-    || echo "    (取不到)"
+    || echo "    (unavailable)"
 done
 echo
-echo "多数派: [$OTHERS ]  ->  客户端用 --nodes 里不含 ${TARGET#cass} 的组合"
-echo "少数派: $TARGET      ->  客户端用 --nodes ${TARGET#cass}"
+echo "majority: [$OTHERS ]  ->  use --nodes without ${TARGET#cass}"
+echo "minority: $TARGET      ->  use --nodes ${TARGET#cass}"

@@ -23,9 +23,9 @@ STORAGE_PORT=7000
 
 for c in $NODES; do
   if ! docker exec "$c" sh -c 'command -v tc' >/dev/null 2>&1; then
-    echo "[$c] 安装 iproute2 ..."
+    echo "[$c] installing iproute2 ..."
     docker exec "$c" sh -c 'apt-get update -qq && apt-get install -y -qq iproute2' >/dev/null 2>&1 \
-      || { echo "[$c] 装 iproute2 失败 (容器可能没有外网)"; exit 1; }
+      || { echo "[$c] failed to install iproute2 (no internet access in the container?)"; exit 1; }
   fi
 
   docker exec "$c" tc qdisc del dev eth0 root 2>/dev/null || true
@@ -51,13 +51,13 @@ for c in $NODES; do
       match ip dport $STORAGE_PORT 0xffff flowid 1:2
 
   case "$JITTER" in
-    0|0ms|0s|"") echo "[$c] 已注入: dport ${STORAGE_PORT} 延迟 ${DELAY} (无抖动)" ;;
-    *)           echo "[$c] 已注入: dport ${STORAGE_PORT} 延迟 ${DELAY} ± ${JITTER}" ;;
+    0|0ms|0s|"") echo "[$c] injected: dport ${STORAGE_PORT} delay ${DELAY} (no jitter)" ;;
+    *)           echo "[$c] injected: dport ${STORAGE_PORT} delay ${DELAY} ± ${JITTER}" ;;
   esac
 done
 
 echo
-echo "=== 验证 ==="
+echo "=== check ==="
 for c in $NODES; do
   echo "--- $c ---"
   docker exec "$c" tc qdisc show dev eth0 | sed 's/^/    /'
