@@ -2,12 +2,15 @@
 """
 Plot violation rate against injected delay from a latency sweep.
 
-Usage: ./.venv/bin/python scripts/plot_sweep.py [model]   (default: ryw)
+Usage: ./.venv/bin/python scripts/plot_sweep.py [model] [--csv PATH] [--out PATH]
+  e.g. ./.venv/bin/python scripts/plot_sweep.py ryw --csv results/ryw_mac.csv
 
-Reads results/<model>.csv, keeps the sweep rows (normal scenario, natural mode,
-jitter 0), uses the last run of each (delay, W, R) point, and writes
-results/<model>_delay_curves.png with a 0-25 ms panel and a full-range panel.
+Reads the CSV (default results/<model>.csv), keeps the sweep rows (normal
+scenario, natural mode, jitter 0), uses the last run of each (delay, W, R)
+point, and writes a PNG (default results/<model>_delay_curves.png) with a
+0-25 ms panel and a full-range panel.
 """
+import argparse
 import csv
 import os
 import sys
@@ -22,9 +25,15 @@ matplotlib.rcParams["font.sans-serif"] = [
     "Microsoft Yahei", "SimHei"]
 matplotlib.rcParams["axes.unicode_minus"] = False
 
-MODEL = sys.argv[1] if len(sys.argv) > 1 else "ryw"
-SRC = f"results/{MODEL}.csv"
-OUT = f"results/{MODEL}_delay_curves.png"
+_ap = argparse.ArgumentParser(description="Plot violation rate vs injected delay.")
+_ap.add_argument("model", nargs="?", default="ryw", help="ryw, mr, mw or wfr (default: ryw)")
+_ap.add_argument("--csv", help="input CSV (default: results/<model>.csv)")
+_ap.add_argument("--out", help="output PNG (default: results/<model>_delay_curves.png)")
+_args = _ap.parse_args()
+
+MODEL = _args.model
+SRC = _args.csv or f"results/{MODEL}.csv"
+OUT = _args.out or f"results/{MODEL}_delay_curves.png"
 
 if not os.path.exists(SRC):
     sys.exit(f"找不到 {SRC} —— 先跑 ./scripts/sweep_latency.sh {MODEL}")

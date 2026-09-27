@@ -35,6 +35,7 @@ All reported runs use 100 iterations per configuration. Results are appended to 
 ./scripts/sweep_latency.sh ryw 100 0 5 10 15 20 50 100 200 400 800   # same points for mr, mw
 ./scripts/sweep_latency.sh wfr 100 0 5 10 20 50
 ./.venv/bin/python scripts/plot_sweep.py ryw                          # -> results/ryw_delay_curves.png
+./.venv/bin/python scripts/plot_sweep.py ryw --csv results/ryw_mac.csv --out ryw_mac.png   # committed data
 ```
 
 **Scenario matrices** (4 models × 4 W/R combinations), each run at 0 ms and at 100 ms ± 50 ms delay:
