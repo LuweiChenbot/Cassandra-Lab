@@ -1,21 +1,13 @@
 #!/usr/bin/env bash
-# 跑完整实验矩阵: 4 个模型 × 4 个 R/W 组合, 按场景自动套用正确的节点参数。
+# Run the full matrix for one scenario: RYW, MR, MW and WFR, each with W/R =
+# ONE/ONE, ONE/QUORUM, QUORUM/QUORUM and ALL/ONE. Node roles and setup/verify
+# CLs are chosen per scenario so no unreachable node is used.
 #
-#   用法: ./scripts/run_matrix.sh <场景> [迭代次数]
-#   场景: normal | node_failure | partition_majority | partition_minority
-#
-# 为什么每个场景要单独配节点参数
-# ------------------------------
-# MW 默认用 node2 写 W1、node3 写 W2, WFR 默认要用满三个节点。
-# 节点故障/分区时 node3 不可达, 沿用默认参数会直接报错。
-# 而且 setup/verify 这类"实验装置"用的 CL 默认是 ALL, 三副本不全时
-# 整轮迭代会全部作废 —— 必须降到 QUORUM(多数派) 或 ONE(少数派)。
-#
-# 前置条件:
-#   normal              : 三节点全在, 已跑 inject_latency.sh
-#   node_failure        : docker stop cass3
-#   partition_majority  : ./scripts/partition.sh cass3, 客户端连 cass1/cass2
-#   partition_minority  : ./scripts/partition.sh cass3, 客户端只连 cass3
+# Usage: ./scripts/run_matrix.sh <scenario> [iterations=1000]
+#   normal              all nodes up (run inject_latency.sh first)
+#   node_failure        after: docker stop cass3
+#   partition_majority  after: ./scripts/partition.sh cass3 (uses cass1, cass2)
+#   partition_minority  after: ./scripts/partition.sh cass3 (uses cass3 only)
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -33,18 +25,17 @@ case "$SCENARIO" in
     WFR="--write-node 1 --read-node 2 --client-node 3 --verify-node 1 --setup-cl ALL --verify-cl ALL"
     ;;
   node_failure|partition_majority)
-    # 只剩 cass1 + cass2。装置 CL 降到 QUORUM(2/3, 多数派仍可满足)
+    # only cass1 and cass2 reachable: setup/verify CLs drop to QUORUM
     NODES="1,2"
     RYW="--write-node 1 --read-node 2"
     MR="--write-node 1 --read1-node 1 --read2-node 2 --seed-cl QUORUM"
-    # verify 降到 QUORUM 后必须给复制留收敛时间, 否则可见性滞后会被误判成定序违例
+    # QUORUM verification needs --settle-ms, or replication lag looks like misordering
     MW="--write1-node 1 --write2-node 2 --verify-node 1 --verify-cl QUORUM --settle-ms 1000"
     WFR="--write-node 1 --read-node 2 --client-node 1 --verify-node 1 --setup-cl QUORUM --verify-cl QUORUM --settle-ms 1000"
     ;;
   partition_minority)
-    # 只有 cass3 一个节点可达。装置 CL 只能用 ONE。
-    # 注意: 单节点下 RYW/MR 的读写都在本地, 结构上不可能违例 ——
-    # 这一组测的是*可用性*(哪些 CL 还能服务), 不是违例率。
+    # only cass3 reachable: setup CLs drop to ONE. Everything runs on one node,
+    # so this measures availability, not violations.
     NODES="3"
     RYW="--write-node 3 --read-node 3"
     MR="--write-node 3 --read1-node 3 --read2-node 3 --seed-cl ONE"
@@ -58,13 +49,13 @@ case "$SCENARIO" in
     ;;
 esac
 
-# CSV 里的场景标签: partition_majority / partition_minority 都属于 partition 拓扑
+# both partition sides are tagged "partition" in the CSV
 case "$SCENARIO" in
   partition_*) TAG="partition" ;;
   *)           TAG="$SCENARIO" ;;
 esac
 
-# 实验矩阵的四个 R/W 组合
+# the four W/R combinations
 COMBOS=("ONE ONE" "ONE QUORUM" "QUORUM QUORUM" "ALL ONE")
 
 echo "==================================================================="

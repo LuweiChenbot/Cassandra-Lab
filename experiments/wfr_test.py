@@ -1,69 +1,25 @@
 #!/usr/bin/env python3
 """
-wfr_test.py -- Writes Follow Reads (写跟随读)
+Writes-follow-reads (WFR) test.
 
-定义 (Terry et al., Bayou 会话保证)
-----------------------------------
-客户端在会话中读到了某个写 W1 的效果, 那么它之后发出的写 W2 必须在
-*所有*副本上被排在 W1 之后。
+Each iteration uses a fresh key:
+  1. setup write value=1 (W_a) through --write-node at --setup-cl
+  2. write value=2 (W_b) through --write-node at --write-cl
+     (--verify-cl in skew mode)
+  3. the client reads through --read-node at --read-cl -> r
+  4. the client writes r + 10 through --client-node at --write-cl
+  5. read the final value through --verify-node at --verify-cl
+Only iterations where the client read 2 (it saw W_b) are checked; a final
+value other than 12 is a violation. Reads of 1 are counted as stale_trigger.
 
-注意这条保证约束的是"定序", 不是"可见性"。它只管客户端*确实看到过*的写;
-客户端没看到的写不在它的约束范围内。这个区别决定了下面的判定口径。
+Modes:
+  natural  driver timestamps; expected 0% violations
+  skew     W_b gets timestamp base + --skew-us, so the client's later write
+           loses; expected ~100% violations at every consistency level
 
-实验构造
---------
-每次迭代用一个全新的 key:
-
-    1. [装置] 经 write_node 以 CL=setup_cl 写 value=1        -- 记为 W_a
-    2. W_b:   经 write_node 写 value=2
-    3. 客户端经 read_node 以 CL=read_cl 读 -> r
-    4. 客户端经 client_node 以 CL=write_cl 写 value = r + 10  -- 读-改-写
-    5. 经 verify_node 以 CL=verify_cl 读最终值 -> final
-
-    严格 WFR 违例的判定口径:
-        仅统计 r == 2 的迭代 (此时客户端确实观测到了 W_b),
-        若 final != 12, 说明客户端读后发出的写没有排在 W_b 之后 => 违例。
-
-    为什么不把 r == 1 也算违例:
-        r == 1 时客户端只看到了 W_a, 它写出的 11 时间戳高于 W_a,
-        在所有副本上都排在 W_a 之后 —— 严格 WFR 是满足的。
-        这种情况属于"读到陈旧值导致更新丢失", 是可见性问题(RYW/MR 范畴),
-        单独记为 stale_trigger 指标, 不计入 WFR 违例。
-
-时间戳来源 (与 mw_test.py 同一前提, 必须说准)
----------------------------------------------
-cassandra-driver 默认挂着 MonotonicTimestampGenerator, 普通写的时间戳
-由**客户端**生成并随请求发送, 协调者的系统时钟不参与 (本项目已实测确认,
-详见 mw_test.py 的说明)。所以下面 skew 模式构造的是
-**client-supplied timestamp inversion**, 对应"不同机器上的客户端进程
-因 NTP 失步而产生倒挂的时间戳", 不是"协调者之间的时钟偏移"。
-
-两种模式
---------
-natural:
-    W_b 用 CL=write_cl 写, 时间戳由驱动生成。
-    预期: 严格违例恒为 0 (客户端后发的写时间戳必然最新);
-          但 stale_trigger 随 CL 变化 —— 这一维才是 CL 敏感的。
-
-skew:
-    W_a 时间戳 = base, W_b 时间戳 = base + skew (写出 W_b 的客户端时钟快),
-    且 W_b 用 CL=verify_cl(ALL) 写以保证客户端一定读得到 —— 把可见性这一维
-    固定住, 单独隔离时间戳的影响。
-    客户端读到 2, 随后写 12 —— 用驱动的自然时间戳, 落后于 W_b。
-    LWW 直接丢弃客户端的写, final 仍是 2。
-    预期: 所有 CL 组合下严格违例率都接近 100%。
-
-    !! 关键前提: skew 必须大于 "W_b 到客户端后续写" 的实际间隔。
-       否则客户端的自然时间戳反而更高, 违例根本无法成立。
-       注入 200ms 复制延迟后该间隔实测约 1.1-1.4 秒, 所以默认 skew 取 5 秒。
-       脚本会记录 mean_gap_us 和 skew_too_small, 让这个前提可验证。
-       换句话说, WFR 违例成立当且仅当:
-           客户端间时钟偏移 > 被观测的写到后续写之间的实际间隔
-
-结论指向
---------
-和 MW 一样, WFR 在 Cassandra 里是由*写时间戳*定序的, 与 R/W 一致性级别
-正交。R+W>N 能修好 RYW 和 MR, 但修不了 MW 和 WFR。
+The skew must exceed the time from W_b to the client's write (about 1.1-1.4 s
+with 200 ms injected delay, hence the 5 s default). mean_gap_us and
+skew_too_small in the CSV show whether it did.
 """
 import sys
 import time
@@ -78,17 +34,17 @@ from common import (
 
 MODEL = "wfr"
 V_A, V_B = 1, 2
-OFFSET = 10          # 客户端的读-改-写: new = r + OFFSET
+OFFSET = 10          # client's read-modify-write: new = r + OFFSET
 
 
 def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
-    wn = nodes[args.write_node]      # W_a / W_b 的协调者
-    rn = nodes[args.read_node]       # 客户端读的节点
-    cn = nodes[args.client_node]     # 客户端写的节点
-    vn = nodes[args.verify_node]     # 收敛校验
+    wn = nodes[args.write_node]      # coordinator for W_a and W_b
+    rn = nodes[args.read_node]       # client's read
+    cn = nodes[args.client_node]     # client's write
+    vn = nodes[args.verify_node]     # final verification read
     run_id = time.strftime("%H%M%S")
 
-    wb_cl = v_cl if mode == "skew" else w_cl      # skew 模式固定用强 CL 写 W_b
+    wb_cl = v_cl if mode == "skew" else w_cl  # skew: W_b written at verify-cl
     wb_cl_name = args.verify_cl if mode == "skew" else args.write_cl
 
     print(f"\n--- 模式 {mode}: W_a@{args.setup_cl} -> W_b@{wb_cl_name} "
@@ -105,8 +61,8 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
     iterations = triggered = violations = errors = 0
     stale_trigger = read_none = 0
     client_write_lost = 0
-    skew_too_small = 0                 # 偏移被迭代耗时吃掉, 该次迭代不可能违例
-    elapsed_sum = elapsed_n = 0        # base -> 客户端写 的实际间隔
+    skew_too_small = 0                 # iterations where elapsed time exceeded the skew
+    elapsed_sum = elapsed_n = 0        # time from base to the client's write
     step = max(1, args.iterations // 10)
 
     try:
@@ -132,14 +88,12 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
                 if args.sleep_ms:
                     time.sleep(args.sleep_ms / 1000.0)
 
-                r = rn.read(key, r_cl)                        # 触发 WFR 义务的那次读
+                r = rn.read(key, r_cl)  # the read the client's write depends on
                 new_val = (r if r is not None else 0) + OFFSET
-                # 客户端这次写用驱动的自然时间戳(约等于此刻墙上时钟)。
-                # 记录它是为了判定 skew 是否大于 "W_b -> 本次写" 的实际间隔。
+                # the client write gets a driver timestamp (~now); noted to check the skew
                 t_client = now_us()
                 cn.write(key, new_val, w_cl, writer="client")
-                # 收敛等待只放在校验读之前, 不影响上面那次"触发 WFR 义务的读" ——
-                # 后者必须立刻读才能测出陈旧读率。理由同 mw_test.py。
+                # settle only before the verification read, never before the client's read
                 if args.settle_ms:
                     time.sleep(args.settle_ms / 1000.0)
                 final, fwriter, fwt = vn.read_full(key, v_cl)
@@ -172,20 +126,20 @@ def run_mode(mode, nodes, args, w_cl, r_cl, s_cl, v_cl, topo):
                 trace.write(**rec)
                 continue
             if r == V_A:
-                # 只看到 W_a: 严格 WFR 不受约束, 但这是实际危险的"陈旧读"
+                # saw only W_a: no WFR obligation, counted as a stale read
                 stale_trigger += 1
                 rec.update(triggered=False, violation=None,
                            note="read saw only W_a (stale); counted as stale_trigger")
                 trace.write(**rec)
                 continue
 
-            # r == V_B: 客户端确实观测到了 W_b, WFR 义务成立
+            # r == V_B: the client saw W_b, so the WFR obligation applies
             triggered += 1
             violated = (final != new_val)
             if violated:
                 violations += 1
                 if final == V_B:
-                    client_write_lost += 1   # 客户端的写被 W_b 的高时间戳吃掉
+                    client_write_lost += 1   # client write lost to W_b's higher timestamp
             rec.update(triggered=True, violation=violated)
             trace.write(**rec)
 

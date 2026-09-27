@@ -1,70 +1,23 @@
 #!/usr/bin/env python3
 """
-mw_test.py -- Monotonic Writes (单调写)
+Monotonic-writes (MW) test.
 
-定义
-----
-同一客户端先发 W1 后发 W2, 则所有副本上 W2 必须排在 W1 之后。
+Each iteration uses a fresh key: write value=1 (W1) through --write1-node, then
+value=2 (W2) through --write2-node, both at --write-cl, and read the final value
+through --verify-node at --verify-cl (ALL by default). A final value other than
+2 is a violation. --read-cl is recorded in the CSV but not used.
 
-为什么 MW 在 Cassandra 里跟 R/W 一致性级别无关
-----------------------------------------------
-Cassandra 的冲突消解是 last-write-wins, 唯一的裁决依据是每个 cell 的
-写时间戳 (WRITETIME), 而不是请求到达顺序。
+Cassandra keeps the write with the highest timestamp, and the Python driver
+assigns timestamps on the client, so the outcome depends on timestamps, not on
+consistency levels.
 
-  - CL 控制的是"等几个副本 ack"(写) 和"问几个副本"(读), 也就是*可见性*;
-  - 谁覆盖谁, 完全由时间戳大小决定, 也就是*定序*。
+Modes:
+  natural  driver timestamps (W2 is later); expected 0% violations
+  skew     W1 = base + --skew-us, W2 = base, as if two clients' clocks
+           disagreed; expected 100% violations at every consistency level
 
-所以只要 W2 的时间戳大于 W1, 不管 CL=ONE 还是 ALL, 最终态都是 W2;
-只要 W2 的时间戳小于 W1, 不管 CL=ONE 还是 ALL, W2 都会被永久丢弃。
-CL 这一维对 MW 完全正交 —— 这正是实验矩阵里 MW 一列全打 "?" 的原因,
-而本脚本就是用来把这个 "?" 变成确定结论的。
-
-写时间戳到底由谁生成 (这一点必须说准)
--------------------------------------
-Cassandra 的写时间戳有三个可能来源, 优先级从高到低:
-
-  1. CQL 语句里的 USING TIMESTAMP —— 显式指定, 覆盖一切;
-  2. 客户端驱动生成并随请求发送 —— **现代驱动的默认行为**。
-     cassandra-driver 的 Cluster.timestamp_generator 默认是
-     MonotonicTimestampGenerator, 时间戳在客户端机器上生成;
-  3. 协调者用自己的墙上时钟赋值 —— 仅当客户端没提供时间戳时
-     (老驱动, 或显式把 timestamp_generator 设为 None)。
-
-本项目实测确认了第 2 条: 把驱动的生成器替换成一个固定的异常值
-(1000000000000000, 即 2001 年) 后, 不带 USING TIMESTAMP 的普通写
-落库的 WRITETIME 恰好等于该值, 而非写入时刻。
-
-因此 skew 模式构造的是 **client-supplied timestamp inversion**
-(客户端提供的时间戳倒挂), 不是"协调者之间的时钟偏移"。
-报告里必须区分这两者, 不能混为一谈。
-
-对应的真实故障是: 两个客户端进程跑在**不同机器**上, 机器之间 NTP 失步,
-各自驱动生成的时间戳因而倒挂。由于时间戳在客户端生成, 客户端机器的
-时钟偏移会直接决定写的定序 —— 这在生产环境里非常常见, 也正是
-Cassandra 官方建议"要么全程严格授时, 要么由应用统一提供时间戳"的原因。
-USING TIMESTAMP 只是让这个偏移可控可复现, 省去真的准备两台失步的机器。
-
-两种模式
---------
-natural (基线):
-    用驱动默认时间戳正常写两次。两次写相隔毫秒级, 必然 ts2 > ts1。
-    预期: 所有 CL 组合下违例都是 0。
-    这一组的作用是证明"正常情况下 MW 不会自己违例", 从而说明
-    下一组的违例确实来自时间戳倒挂而非别的因素。
-
-skew (构造违例):
-        W1 (value=1) 时间戳 = base + skew    <- 发出 W1 的客户端时钟快
-        W2 (value=2) 时间戳 = base           <- 发出 W2 的客户端时钟正常
-    客户端的发送顺序仍是 W1 -> W2, 但 LWW 会保留 W1。
-    预期: 所有 CL 组合下违例率都是 100%。
-
-判定
-----
-    最终值 = 经 verify_node 以 CL=verify_cl (默认 ALL) 读出的值。
-    用 ALL 是因为 MW 判的是"收敛后的定序", 必须看全部副本;
-    若用 ONE 读到一个还没收到任何写的副本, 那是可见性问题(RYW/MR),
-    会和 MW 混为一谈。
-    最终值 != 2  =>  MW 违例 (客户端后发的写没有胜出)
+When --verify-cl is below ALL (node failure, partition), set --settle-ms so a
+replica that hasn't received W2 yet isn't counted as a violation.
 """
 import sys
 import time
@@ -122,10 +75,8 @@ def run_mode(mode, nodes, args, w_cl, v_cl, topo):
                 w2n.write(key, V2, w_cl, writer="w2", timestamp=ts2)
                 if args.sleep_ms:
                     time.sleep(args.sleep_ms / 1000.0)
-                # verify_cl=ALL 时不需要等: ALL 会问遍所有副本, 谁的时间戳最新谁胜出,
-                # 与复制是否完成无关。但故障/分区场景下只能用 QUORUM ——
-                # 此时若法定人数恰好没包含拿到 W2 的副本, 会读到 W1 而被误判成
-                # 定序违例, 实际是可见性假阳性。settle_ms 给复制留出收敛时间。
+                # Below ALL, a replica still missing W2 would look like an ordering
+                # violation, so --settle-ms lets replication finish first.
                 if args.settle_ms:
                     time.sleep(args.settle_ms / 1000.0)
                 final, fwriter, fwt = vn.read_full(key, v_cl)
@@ -143,9 +94,9 @@ def run_mode(mode, nodes, args, w_cl, v_cl, topo):
             if violated:
                 violations += 1
                 if final == V1:
-                    kept_v1 += 1      # W1 覆盖了 W2 —— 典型 MW 违例
+                    kept_v1 += 1      # W1 overwrote W2: an MW violation
                 else:
-                    lost_both += 1    # 两次写都不可见 (可见性问题, 非定序问题)
+                    lost_both += 1    # neither write visible (visibility, not order)
 
             rec.update(observed_value=final, winning_writer=fwriter,
                        winning_timestamp=fwt, triggered=True, violation=violated,

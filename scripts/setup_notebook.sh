@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Create .venv with the notebook dependencies and register its Jupyter kernel.
+# Usage: bash scripts/setup_notebook.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 -m venv .venv

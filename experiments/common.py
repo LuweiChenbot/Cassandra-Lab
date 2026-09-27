@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
 """
-common.py -- Cassandra client-centric consistency lab 的共享基础设施。
+Shared infrastructure for the consistency experiments.
 
-核心职责:
-  1. 把每个 CQL session "钉死" 在指定的物理节点上 (pinning)
-  2. 提供带 CL / USING TIMESTAMP 的读写原语
-  3. 统一的 CSV 结果记录格式
+Each Node is a CQL session pinned to one Cassandra node. The containers publish
+CQL on host ports 9042/9043/9044, and WhiteListRoundRobinPolicy(["127.0.0.1"])
+stops the driver from routing requests through any other coordinator.
+connect_nodes() checks the pinning through system.local.
 
-为什么必须 pinning
-------------------
-Python 驱动默认用 TokenAwarePolicy(DCAwareRoundRobinPolicy) 做负载均衡,
-它会在集群所有节点间自动轮转协调者。如果不禁用, "从 node1 写、从 node2 读"
-这个实验前提根本不成立 —— 驱动可能两次都路由到同一个节点, 违例就消失了。
-
-做法: WhiteListRoundRobinPolicy(['127.0.0.1'])。
-三个容器分别把 9042 映射到宿主机 9042/9043/9044, 所以
-  Cluster(contact_points=['127.0.0.1'], port=9043)
-就唯一确定了 cass2。而集群里其他节点在 system.peers 里的地址是
-172.18.0.x, 不在白名单内 -> distance() 返回 IGNORED -> 驱动根本不会
-对它们建连接池。connect() 里会用 system.local (节点本地表) 验证钉对了没有。
+summarize() appends one row per run to results/<model>.csv and
+results/all_results.csv; TraceWriter writes one JSON line per iteration to
+results/traces/.
 """
 import argparse
 import csv
@@ -32,12 +23,12 @@ from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.policies import WhiteListRoundRobinPolicy
 
-# ---------------------------------------------------------------- 常量
+# ---------------------------------------------------------------- constants
 
 KEYSPACE = "consistency_lab"
 TABLE = "kv"
 
-# 节点号 -> 宿主机端口 (见 docker-compose.yml 的 ports 映射)
+# node number -> host port (see ports in docker-compose.yml)
 NODE_PORTS = {1: 9042, 2: 9043, 3: 9044}
 NODE_NAMES = {1: "cass1", 2: "cass2", 3: "cass3"}
 
@@ -58,8 +49,8 @@ CSV_FIELDS = [
     "errors", "error_rate", "delay_ms", "jitter_ms", "topology", "extra",
 ]
 
-# 驱动在不可用 / 超时 时抛出的异常, 统一捕获并计入 errors 而不是让脚本崩掉。
-# 节点故障场景下 W=ALL 必然走到这里 —— 这本身就是要记录的数据。
+# Driver errors counted in the "errors" column instead of stopping the run
+# (e.g. every W=ALL write while a node is down).
 from cassandra import (
     Unavailable, WriteTimeout, ReadTimeout, WriteFailure, ReadFailure,
     OperationTimedOut, InvalidRequest,
@@ -87,10 +78,10 @@ def cl_name(level):
     return str(level)
 
 
-# ---------------------------------------------------------------- 节点封装
+# ---------------------------------------------------------------- node sessions
 
 class Node:
-    """一个钉死在单个 Cassandra 物理节点上的 CQL session。"""
+    """A CQL session pinned to a single Cassandra node."""
 
     def __init__(self, number, request_timeout=30.0):
         if number not in NODE_PORTS:
@@ -101,22 +92,21 @@ class Node:
 
         profile = ExecutionProfile(
             load_balancing_policy=WhiteListRoundRobinPolicy(["127.0.0.1"]),
-            consistency_level=ConsistencyLevel.ONE,   # 每条语句会单独覆盖
+            consistency_level=ConsistencyLevel.ONE,   # overridden per statement
             request_timeout=request_timeout,
         )
         self.cluster = Cluster(
             contact_points=["127.0.0.1"],
             port=self.port,
             execution_profiles={EXEC_PROFILE_DEFAULT: profile},
-            # 节点故障场景下不要让驱动后台无限重连刷屏
+            # keep retrying a stopped node every 2 s
             reconnection_policy=__import__(
                 "cassandra.policies", fromlist=["ConstantReconnectionPolicy"]
             ).ConstantReconnectionPolicy(2.0, max_attempts=None),
         )
         self.session = self.cluster.connect(KEYSPACE)
 
-        # system.local 是节点本地表: 谁做协调者就返回谁的身份。
-        # 用它验证 pinning 是否真的生效。
+        # system.local reports the coordinator's own address; used to check pinning
         row = self.session.execute("SELECT broadcast_address FROM system.local").one()
         self.address = str(row.broadcast_address)
 
@@ -127,10 +117,10 @@ class Node:
         self._sel = self.session.prepare(
             f"SELECT value, writer, WRITETIME(value) AS wt FROM {TABLE} WHERE key = ?")
 
-    # -- 读写原语 -------------------------------------------------
+    # -- read/write primitives -------------------------------------
 
     def write(self, key, value, consistency, writer=None, timestamp=None):
-        """写一行。timestamp 非 None 时走 USING TIMESTAMP (单位: 微秒)。"""
+        """Write one row; a timestamp (microseconds) is sent as USING TIMESTAMP."""
         writer = writer if writer is not None else self.name
         if timestamp is None:
             bs = self._ins.bind((key, value, writer))
@@ -140,14 +130,14 @@ class Node:
         self.session.execute(bs)
 
     def read(self, key, consistency):
-        """返回 value (int) 或 None (行不存在 / 该副本还没收到)。"""
+        """Return the value, or None if the replicas read have no row."""
         bs = self._sel.bind((key,))
         bs.consistency_level = consistency
         row = self.session.execute(bs).one()
         return None if row is None else row.value
 
     def read_full(self, key, consistency):
-        """返回 (value, writer, writetime), 用于需要看时间戳的场景。"""
+        """Return (value, writer, writetime), or three Nones if there is no row."""
         bs = self._sel.bind((key,))
         bs.consistency_level = consistency
         row = self.session.execute(bs).one()
@@ -163,7 +153,7 @@ class Node:
 
 
 def connect_nodes(numbers=(1, 2, 3), verbose=True):
-    """连接若干节点并验证 pinning 生效 (三个 session 必须落在三个不同 IP 上)。"""
+    """Connect to the given nodes; fail if two sessions reach the same node."""
     nodes = {}
     for n in numbers:
         nodes[n] = Node(n)
@@ -181,24 +171,19 @@ def connect_nodes(numbers=(1, 2, 3), verbose=True):
     return nodes
 
 
-# ---------------------------------------------------------------- 时间戳
+# ---------------------------------------------------------------- timestamps
 
 def now_us():
-    """当前时间的微秒时间戳 —— Cassandra 写时间戳的单位。"""
+    """Current time in microseconds, the unit of Cassandra write timestamps."""
     return int(time.time() * 1_000_000)
 
 
-# ---------------------------------------------------------------- 结果记录
+# ---------------------------------------------------------------- result files
 
 def _migrate_header(path):
     """
-    已有 CSV 的表头与当前 CSV_FIELDS 不一致时, 就地重写成新表头,
-    缺失的列留空, 多余的列丢弃。
-
-    为什么需要: 给 CSV 加列之后, 老文件的表头还是旧的。DictWriter 不会
-    校验文件里已有的表头, 会直接按新字段数追加 —— 结果是表头 N 列、
-    新行 N+2 列的错位文件, 而且不会报错。组员拉到新代码但本地留着旧结果
-    时必然踩这个坑, 所以放在写入路径上自动处理。
+    Rewrite a CSV whose header differs from CSV_FIELDS (missing columns left
+    empty, extra ones dropped) so newly appended rows line up with the header.
     """
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         return
@@ -221,7 +206,7 @@ def _migrate_header(path):
 
 
 def record(row):
-    """把一行结果追加到 results/<model>.csv 和 results/all_results.csv。"""
+    """Append one row to results/<model>.csv and results/all_results.csv."""
     os.makedirs(RESULTS_DIR, exist_ok=True)
     row = {k: row.get(k, "") for k in CSV_FIELDS}
     for path in (os.path.join(RESULTS_DIR, f"{row['model']}.csv"),
@@ -237,7 +222,7 @@ def record(row):
 
 def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
               iterations, triggered, violations, errors, extra="", topology=""):
-    """算出比率、打印到终端、写 CSV。返回该行 dict。"""
+    """Compute the rates, print a summary and record the row. Returns the row."""
     denom = triggered if triggered else 0
     v_rate = (violations / denom) if denom else 0.0
     e_rate = (errors / iterations) if iterations else 0.0
@@ -248,7 +233,7 @@ def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
         "iterations": iterations, "triggered": triggered,
         "violations": violations, "violation_rate": f"{v_rate:.4f}",
         "errors": errors, "error_rate": f"{e_rate:.4f}",
-        # 从 tc 读回来的实际生效值, 不是命令行声称的值
+        # netem values read back from tc, not the requested ones
         "delay_ms": topology_mod.LAST_NETEM["delay_ms"],
         "jitter_ms": topology_mod.LAST_NETEM["jitter_ms"],
         "topology": topology,
@@ -265,7 +250,7 @@ def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
     return row
 
 
-# ---------------------------------------------------------------- 参数
+# ---------------------------------------------------------------- command line
 
 def build_parser(model, default_write="ONE", default_read="ONE"):
     p = argparse.ArgumentParser(description=f"{model} 一致性实验")
@@ -285,13 +270,13 @@ def build_parser(model, default_write="ONE", default_read="ONE"):
     return p
 
 
-# ---------------------------------------------------------------- 参数校验
+# ---------------------------------------------------------------- argument checks
 
 def validate(args, roles):
     """
-    开跑前把不合法的参数组合拦下来, 给出说明性错误而不是运行中 KeyError。
+    Exit with a readable message on invalid argument combinations.
 
-    roles: {"--write-node": args.write_node, ...} —— 本实验用到的节点角色。
+    roles maps each node-role flag to its node, e.g. {"--write-node": 1}.
     """
     errs, warns = [], []
 
@@ -310,14 +295,14 @@ def validate(args, roles):
     if len(set(nodes)) != len(nodes):
         errs.append(f"--nodes 有重复: {args.nodes!r}")
 
-    # 角色节点必须在连接列表里 —— 否则运行到一半 KeyError
+    # every role node must be in --nodes
     for flag, n in roles.items():
         if nodes and n not in nodes:
             errs.append(
                 f"{flag}={n} 不在 --nodes={','.join(map(str, nodes))} 之内。"
                 f"故障/分区场景下请显式指定该角色, 可选 {sorted(nodes)}")
 
-    # 一致性级别拼写
+    # consistency level names
     cl_flags = [("--write-cl", args.write_cl), ("--read-cl", args.read_cl)]
     for name in ("verify_cl", "setup_cl", "seed_cl"):
         if hasattr(args, name):
@@ -326,9 +311,8 @@ def validate(args, roles):
         if str(val).strip().upper() not in CL_BY_NAME:
             errs.append(f"{flag}={val!r} 不是合法一致性级别, 可选 {list(CL_BY_NAME)}")
 
-    # RF=3 下 ALL 需要三个副本都在。
-    #   装置用的 CL 不可用 -> 整轮数据作废, 按错误拦下;
-    #   自变量 CL 不可用 -> 那正是要测的现象(记录 Unavailable), 只告警。
+    # With fewer than 3 nodes, ALL cannot succeed: an error for the setup/verify
+    # CLs (every iteration would be void), only a warning for the tested W/R CLs.
     if nodes and len(nodes) < 3:
         for name, flag in (("setup_cl", "--setup-cl"), ("verify_cl", "--verify-cl"),
                            ("seed_cl", "--seed-cl")):
@@ -354,16 +338,10 @@ def validate(args, roles):
         raise SystemExit(2)
 
 
-# ---------------------------------------------------------------- 逐次明细
+# ---------------------------------------------------------------- per-iteration traces
 
 class TraceWriter:
-    """
-    每次迭代写一行 JSON, 让汇总 CSV 里的每个数字都能追溯到原始证据。
-
-    汇总表回答"违例率是多少", 明细回答"具体哪一次、写了什么、读到什么、
-    经过哪个协调者、时间戳多少、异常是哪一类"。出了反常结果时,
-    没有明细就只能重跑并祈祷复现。
-    """
+    """Write one JSON line per iteration to results/traces/<run>.jsonl."""
 
     def __init__(self, model, scenario, mode, write_cl, read_cl, run_id, enabled=True):
         self.enabled = bool(enabled)

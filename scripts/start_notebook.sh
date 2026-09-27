@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Open the demo notebook in JupyterLab (run setup_notebook.sh first).
+# Usage: bash scripts/start_notebook.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ ! -x .venv/bin/jupyter ]; then

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 移除 inject_latency.sh 注入的所有 netem 规则, 恢复基线。
+# Remove all tc/netem rules (injected delay and partitions) from the nodes.
+# Usage: ./scripts/clear_latency.sh
 set -uo pipefail
 NODES="${NODES:-cass1 cass2 cass3}"
 for c in $NODES; do

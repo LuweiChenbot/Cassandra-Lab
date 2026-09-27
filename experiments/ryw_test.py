@@ -1,37 +1,15 @@
 #!/usr/bin/env python3
 """
-ryw_test.py -- Read-Your-Writes (读己之写)
+Read-your-writes (RYW) test.
 
-定义
-----
-同一个客户端写入 x 后, 它之后的任何读都必须看到 x 或更新的值。
+Each iteration uses a fresh key: write value i through --write-node at
+--write-cl, then immediately read it through --read-node at --read-cl.
+Reading anything other than i (usually None) is a violation. Writing and
+reading through different coordinators models a client that reconnects to
+another node.
 
-实验构造
---------
-每次迭代用一个全新的 key:
-
-    1. 客户端经 write_node 写 value=i          (CL = write_cl)
-    2. 同一客户端立刻经 read_node 读同一个 key  (CL = read_cl)
-    3. 读回值 != i  =>  RYW 违例
-
-为什么写和读要走不同节点
-------------------------
-如果走同一个协调者, 由于 RF=3 时协调者自己就是副本, CL=ONE 的写会先落本地,
-紧接着的本地读必然命中 —— 违例被掩盖, 实验失去意义。
-换节点读模拟的是真实场景: 客户端重连、负载均衡器切换、驱动故障转移。
-RYW 这条会话保证要防的正是这种情况。
-
-为什么用全新 key
-----------------
-新 key 下"没复制到"表现为读回 None, 判定绝对无歧义 —— 不需要区分
-"读到旧值"还是"读到新值", 只要不是 i 就是违例。
-
-预期
-----
-    W=ONE    R=ONE     违例 (1+1 <= 3, 法定人数不相交)
-    W=ONE    R=QUORUM  部分违例 (1+2 <= 3, 恰在边界)
-    W=QUORUM R=QUORUM  不违例 (2+2 > 3, 必然相交)
-    W=ALL    R=ONE     不违例 (3+1 > 3)
+Expected with RF=3: ONE/ONE and ONE/QUORUM can violate (W+R <= 3);
+QUORUM/QUORUM and ALL/ONE cannot (W+R > 3).
 """
 import sys
 import time
