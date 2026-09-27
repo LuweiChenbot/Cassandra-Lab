@@ -22,12 +22,12 @@ Component
 Configuration
 \end{minipage} \\
 \midrule\noalign{}
-Host & Lenovo Thinkbook 16p, Linux {[}6.18.33.2-microsoft-standard-WSL2 x86\_64{]}, Docker {[}29.7.2{]}; Macbook Pro, Darwin 27.0.0 arm64 \\
+Host & Lenovo Thinkbook 16p, Linux {[}6.18.33.2-microsoft-standard-WSL2 x86\_64{]}, Docker {[}29.7.2{]}; Macbook Pro, Darwin 27.0.0 arm64, Docker {[}28.4.0{]} \\
 Database & Apache Cassandra {[}4.1.12{]} \\
-Client & Python {[}3.11.16{]}, Cassandra-driver {[}3.30.1{]} \\
+Client & Windows/WSL2: Python {[}3.11.16{]}, macOS: Python {[}3.12.2{]}; Cassandra-driver {[}3.30.1{]} both \\
 Keyspace & consistency\_lab, replication factor=3, SimpleStrategy \\
 Table & kv(key text PRIMARY KEY, value int, writer text) with read\_repair=NONE, speculative\_retry=NONE~\cite{cassandra-read-repair,cassandra-ddl} \\
-Consistency Levels & ONE, QUORUM, ALL (with N=1, 2, 3 replicas respectively). \\
+Consistency Levels & ONE, QUORUM, ALL (requiring responses from 1, 2, and 3 replicas, respectively; $N=3$). \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -39,7 +39,11 @@ In particular, to make the role of each node in the cluster clear, each client s
 
 \subsection{Cluster and Network Setup}\label{introduction:cluster-and-network-setup}
 
-The cluster in our experiment consists of three containers (cass1, cass2, cass3) on one Docker bridge network. cass1 is the only seed node; cass2 and cass3 join through it one after another, each waiting for the previous container to pass its health check, which avoids concurrent bootstrapping (please check the code implementation for realization of the health check mechanism). Each node's CQL port 9042 is published on the host as 9042, 9043, and 9044 respectively, while replication and gossip use port 7000 inside the bridge network. Such separation for communication enables us to inject latency more easily by targeting on synchronization only: on outgoing traffic to port 7000, we inject latency with Linux tc/netem~\cite{tc-netem} inside each container with default value 200ms, while the client traffic on port 9042 is left untouched as delaying it would insert an artificial gap between a write and the following read, giving replication extra time and understating violations.
+The cluster consists of three containers (cass1, cass2, and cass3) on one Docker bridge network, with cass1 serving as the seed node. Each node's CQL port 9042 is published on the host as port 9042, 9043, and 9044, respectively. The nodes communicate with one another through port 7000 inside the bridge network.
+
+We initialize the experiment with \verb|scripts/bootstrap.sh|. It starts the cluster using Docker Compose, waits for the containers to become healthy, and checks their status with \verb|nodetool|. It then runs \verb|scripts/setup_keyspace.cql| on cass1 to create the \verb|consistency_lab| keyspace and the \verb|kv| table, retrying if Cassandra is not yet ready. The script creates a Python virtual environment in \verb|.venv|, installs the packages in \verb|requirements.txt|, tests the client connections, and records the software and host information in \verb|results/environment.txt|.
+
+After bootstrap, we use \verb|scripts/inject_latency.sh| to apply Linux \verb|tc/netem| delay to outgoing traffic destined for port 7000 on each container. The default setting is 200 ms of delay with 50 ms of jitter. This affects internode communication, including replication and internode read traffic, while leaving the client-facing CQL ports untouched. Delaying client traffic could add time between a completed write and the subsequent read, allowing more time for propagation and changing the measured violation rate.
 
 A node failure scenario is realized by simply stopping cass3. Meanwhile, a network partition is realized by dropping traffic on port 7000 between cass3 and the other two nodes in both directions, leaving cass3 running with its client port accessible; clients can therefore access both the majority side (cass1, cass2) and the minority side (cass3).
 
