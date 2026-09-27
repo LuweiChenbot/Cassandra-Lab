@@ -29,7 +29,7 @@ The explicit-timestamp path uses INSERT \ldots{} USING TIMESTAMP. Verification u
 
 Although the matrix and plot retain read\_cl labels, the MW script does not use that parameter for verification. In the normal sweep every verification read uses ALL. Consequently, ONE--ONE and ONE--QUORUM are repeated tests with the same effective write and verification levels.
 
-The driver documentation specifies a default monotonic timestamp generator per Cluster instance. Here, common.py creates a separate Cluster for each pinned node, so there is no explicitly shared generator across the two write connections. Increasing timestamps are expected under the observed sequential execution and stable client clock, but are not guaranteed across these separate generators merely by their individual monotonicity. \href{https://docs.datastax.com/en/developer/python-driver/3.29/api/cassandra/cluster/index.html}{DataStax Python driver documentation}.
+The driver documentation specifies a default monotonic timestamp generator per Cluster instance. Here, common.py creates a separate Cluster for each pinned node, so there is no explicitly shared generator across the two write connections. Increasing timestamps are expected under the observed sequential execution and stable client clock, but are not guaranteed across these separate generators merely by their individual monotonicity. DataStax Python driver documentation~\cite{driver-timestamps}.
 
 \subsubsection{Predicted Outcomes}\label{mw:predicted-outcomes}
 

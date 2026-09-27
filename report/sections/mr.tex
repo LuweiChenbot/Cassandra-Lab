@@ -20,7 +20,7 @@ The `seed\_write' is an experimental setup, not the write consistency level unde
 \caption{MR setup consistency levels and coordinator paths by topology.}\label{tab:mr-1}
 \begin{tabular}{@{}llll@{}}
 \toprule\noalign{}
-Scenario & Seed\_wrtie CL & Write coordinator & Read path \\
+Scenario & Seed\_write CL & Write coordinator & Read path \\
 \midrule\noalign{}
 normal & ALL & node1 & node1 →node2 \\
 partition majority & QUORUM & node1 & node1 →node2 \\
@@ -45,7 +45,7 @@ The actual predicate is rank(r2) \textless{} rank(r1), where missing values have
 
 For the completed update in this workload, write/read intersection provides a useful sufficient condition: W + R \textgreater{} RF. QUORUM--QUORUM satisfies 2 + 2 \textgreater{} 3, while ALL--ONE satisfies 3 + 1 \textgreater{} 3. This reasoning assumes the intended timestamp order, successful operations, and no competing later writes.
 
-Read repair is relevant to weaker writes followed by quorum reads. Cassandra documents that read\_repair=`NONE' still reconciles returned replica data, but does not repair replicas or provide the general monotonic-quorum-read guarantee associated with blocking read repair. More details can be found here: \href{https://cassandra.apache.org/doc/latest/cassandra/managing/operating/read_repair.html}{Apache Cassandra read-repair documentation}
+Read repair is relevant to weaker writes followed by quorum reads. Cassandra documents that read\_repair=`NONE' still reconciles returned replica data, but does not repair replicas or provide the general monotonic-quorum-read guarantee associated with blocking read repair. More details can be found here: Apache Cassandra read-repair documentation~\cite{cassandra-read-repair}.
 
 \subsubsection{Predicted Outcomes}\label{mr:predicted-outcomes}
 
@@ -206,7 +206,7 @@ Effect of increasing base delay at fixed jitter: for ONE--ONE on path 1 → 2, i
 
 Persistent zero results under quorum reads: all six supplementary ONE--QUORUM runs, totalling 1,200 valid trials across different settings and paths, record zero violations. The supplementary data strengthen the observation that this implementation rarely or never exposes the theoretically permitted ONE--QUORUM anomaly under these tested schedules. They do not identify a formal guarantee. Unlike the majority partition, the normal topology still permits different quorum pairs; response timing, selected replicas, and propagation during the first read remain plausible explanations.
 
-\paragraph{Conclution}\label{mr:conclution}
+\paragraph{Conclusion}\label{mr:conclusion}
 
 The combined evidence supports three distinct statements. First, switching read coordinators under ONE--ONE exposes clear backwards reads when propagation is slow. Second, the particular same-coordinator probes and normal ONE--QUORUM runs show no backwards reads, but their zero rates must be interpreted in light of path and timing. Third, partitions change which requests can finish: majority quorums remain available, while the isolated minority can serve only local ONE requests in the MR test.
 
