@@ -20,11 +20,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# CJK-capable fonts (Windows names); only needed if labels contain Chinese
-matplotlib.rcParams["font.sans-serif"] = [
-    "Microsoft Yahei", "SimHei"]
-matplotlib.rcParams["axes.unicode_minus"] = False
-
 _ap = argparse.ArgumentParser(description="Plot violation rate vs injected delay.")
 _ap.add_argument("model", nargs="?", default="ryw", help="ryw, mr, mw or wfr (default: ryw)")
 _ap.add_argument("--csv", help="input CSV (default: results/<model>.csv)")
@@ -36,7 +31,7 @@ SRC = _args.csv or f"results/{MODEL}.csv"
 OUT = _args.out or f"results/{MODEL}_delay_curves.png"
 
 if not os.path.exists(SRC):
-    sys.exit(f"找不到 {SRC} —— 先跑 ./scripts/sweep_latency.sh {MODEL}")
+    sys.exit(f"{SRC} not found; run ./scripts/sweep_latency.sh {MODEL} first or pass --csv")
 
 rows = list(csv.DictReader(open(SRC, newline="")))
 
@@ -68,7 +63,7 @@ _sweep_rows = [r for r in rows if is_sweep_row(r)]
 N_ITER = _sweep_rows[-1]["iterations"] if _sweep_rows else "?"
 
 if not points:
-    sys.exit(f"{SRC} 里没有扫描数据(jitter=0 的行) —— 先跑 "
+    sys.exit(f"{SRC} has no sweep rows (jitter 0); run "
              f"./scripts/sweep_latency.sh {MODEL}")
 
 # two panels: most of the change happens below ~20 ms, but the sweep runs to 800 ms
@@ -101,7 +96,7 @@ fig.tight_layout(rect=[0, 0, 1, 0.94])
 fig.savefig(OUT, dpi=150)
 
 n_pts = sum(len(s) for s in points.values())
-print(f"已保存 -> {OUT}  ({len(points)} 条曲线, {n_pts} 个数据点)")
+print(f"saved -> {OUT}  ({len(points)} curves, {n_pts} points)")
 for (w, r), series in points.items():
     pts = "  ".join(f"{int(x)}ms:{series[x]:.0f}%" for x in sorted(series))
     print(f"  W={w:7} R={r:7}  {pts}")

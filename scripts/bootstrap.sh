@@ -17,18 +17,18 @@ echo
 docker exec cass1 nodetool describecluster | sed -n '1,8p'
 
 echo
-echo "==> [3/5] Building up keyspace and tables..."
+echo "==> [3/5] Creating keyspace and table..."
 for attempt in 1 2 3 4 5 6; do
   if docker exec -i cass1 cqlsh < scripts/setup_keyspace.cql 2>/tmp/cqlsh_err; then
-    echo "  keyspace 就绪 (第 $attempt 次尝试)"
+    echo "  keyspace ready (attempt $attempt)"
     break
   fi
   if [ "$attempt" = 6 ]; then
-    echo "  Failed as the last attempt:" >&2
+    echo "  Keyspace setup failed after 6 attempts:" >&2
     cat /tmp/cqlsh_err >&2
     exit 1
   fi
-  echo "  The $attempt -th attempt not responding, retrying after 8s ..."
+  echo "  Attempt $attempt failed, retrying in 8 s ..."
   sleep 8
 done
 docker exec cass1 cqlsh -e "DESCRIBE TABLE consistency_lab.kv;" \
@@ -41,7 +41,7 @@ if [ ! -d .venv ]; then python3 -m venv .venv; fi
 ./.venv/bin/pip install -q -r requirements.txt
 
 echo
-echo "==> Now confirming each session corresponds to distinct note..."
+echo "==> Now confirming each session is pinned to a different node..."
 ./.venv/bin/python -c "
 import sys; sys.path.insert(0,'experiments')
 from common import connect_nodes

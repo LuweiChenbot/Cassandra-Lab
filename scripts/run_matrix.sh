@@ -43,8 +43,8 @@ case "$SCENARIO" in
     WFR="--write-node 3 --read-node 3 --client-node 3 --verify-node 3 --setup-cl ONE --verify-cl ONE --settle-ms 1000"
     ;;
   *)
-    echo "未知场景: $SCENARIO" >&2
-    echo "可选: normal | node_failure | partition_majority | partition_minority" >&2
+    echo "unknown scenario: $SCENARIO" >&2
+    echo "choose from: normal | node_failure | partition_majority | partition_minority" >&2
     exit 1
     ;;
 esac
@@ -59,7 +59,7 @@ esac
 COMBOS=("ONE ONE" "ONE QUORUM" "QUORUM QUORUM" "ALL ONE")
 
 echo "==================================================================="
-echo " 实验矩阵  场景=$SCENARIO  标签=$TAG  节点=$NODES  n=$N"
+echo " matrix  scenario=$SCENARIO  tag=$TAG  nodes=$NODES  n=$N"
 echo "==================================================================="
 
 run_one() {
@@ -72,7 +72,7 @@ run_one() {
   $PY "experiments/${model}_test.py" \
       --scenario "$TAG" --nodes "$NODES" \
       --write-cl "$w" --read-cl "$r" -n "$N" $extra \
-    || echo "    [该组合以非零状态退出, 继续下一组]"
+    || echo "    [exited non-zero, continuing]"
 }
 
 for combo in "${COMBOS[@]}"; do
@@ -85,6 +85,6 @@ done
 
 echo
 echo "==================================================================="
-echo " 矩阵跑完。汇总: results/all_results.csv"
-echo " 逐次明细: results/traces/"
+echo " matrix done. Summary: results/all_results.csv"
+echo " per-iteration traces: results/traces/"
 echo "==================================================================="

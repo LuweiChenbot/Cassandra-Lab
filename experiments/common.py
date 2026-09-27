@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 import topology as topology_mod
 from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
-from cassandra.policies import WhiteListRoundRobinPolicy
+from cassandra.policies import ConstantReconnectionPolicy, WhiteListRoundRobinPolicy
 
 # ---------------------------------------------------------------- constants
 
@@ -53,7 +53,7 @@ CSV_FIELDS = [
 # (e.g. every W=ALL write while a node is down).
 from cassandra import (
     Unavailable, WriteTimeout, ReadTimeout, WriteFailure, ReadFailure,
-    OperationTimedOut, InvalidRequest,
+    OperationTimedOut,
 )
 from cassandra.cluster import NoHostAvailable
 
@@ -67,7 +67,7 @@ def cl(name):
     """'QUORUM' -> ConsistencyLevel.QUORUM"""
     key = name.strip().upper()
     if key not in CL_BY_NAME:
-        raise ValueError(f"未知一致性级别 {name!r}, 可选: {list(CL_BY_NAME)}")
+        raise ValueError(f"unknown consistency level {name!r}; choose from {list(CL_BY_NAME)}")
     return CL_BY_NAME[key]
 
 
@@ -85,7 +85,7 @@ class Node:
 
     def __init__(self, number, request_timeout=30.0):
         if number not in NODE_PORTS:
-            raise ValueError(f"节点号必须是 1/2/3, 收到 {number}")
+            raise ValueError(f"node number must be 1, 2 or 3, got {number}")
         self.number = number
         self.name = NODE_NAMES[number]
         self.port = NODE_PORTS[number]
@@ -100,9 +100,7 @@ class Node:
             port=self.port,
             execution_profiles={EXEC_PROFILE_DEFAULT: profile},
             # keep retrying a stopped node every 2 s
-            reconnection_policy=__import__(
-                "cassandra.policies", fromlist=["ConstantReconnectionPolicy"]
-            ).ConstantReconnectionPolicy(2.0, max_attempts=None),
+            reconnection_policy=ConstantReconnectionPolicy(2.0, max_attempts=None),
         )
         self.session = self.cluster.connect(KEYSPACE)
 
@@ -162,8 +160,8 @@ def connect_nodes(numbers=(1, 2, 3), verbose=True):
         for nd in nodes.values():
             nd.shutdown()
         raise RuntimeError(
-            f"pinning 失效: 多个 session 落到了同一节点 {addrs}。"
-            "检查 WhiteListRoundRobinPolicy 与端口映射。")
+            f"pinning failed: several sessions reached the same node {addrs}. "
+            "Check WhiteListRoundRobinPolicy and the port mapping.")
     if verbose:
         for n in sorted(nodes):
             print(f"  [pin] node{n} ({nodes[n].name}) -> 127.0.0.1:{nodes[n].port} "
@@ -201,8 +199,8 @@ def _migrate_header(path):
         w.writeheader()
         for r in old_rows:
             w.writerow({k: r.get(k, "") for k in CSV_FIELDS})
-    print(f"  [CSV 迁移] {os.path.relpath(path)}: "
-          f"{len(header)} 列 -> {len(CSV_FIELDS)} 列, {len(old_rows)} 行已保留")
+    print(f"  [CSV migrated] {os.path.relpath(path)}: "
+          f"{len(header)} -> {len(CSV_FIELDS)} columns, {len(old_rows)} rows kept")
 
 
 def record(row):
@@ -240,11 +238,11 @@ def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
         "extra": extra,
     }
     print(f"\n  {'-'*66}")
-    print(f"  模型={model}  场景={scenario}  模式={mode}")
+    print(f"  model={model}  scenario={scenario}  mode={mode}")
     print(f"  W={write_cl}  R={read_cl}  verify={verify_cl}")
-    print(f"  迭代={iterations}  有效样本={triggered}  违例={violations}  "
-          f"违例率={v_rate:.2%}")
-    print(f"  异常={errors} ({e_rate:.2%})   {extra}")
+    print(f"  iterations={iterations}  valid={triggered}  violations={violations}  "
+          f"violation rate={v_rate:.2%}")
+    print(f"  errors={errors} ({e_rate:.2%})   {extra}")
     print(f"  {'-'*66}")
     record(row)
     return row
@@ -253,20 +251,20 @@ def summarize(model, scenario, mode, write_cl, read_cl, verify_cl,
 # ---------------------------------------------------------------- command line
 
 def build_parser(model, default_write="ONE", default_read="ONE"):
-    p = argparse.ArgumentParser(description=f"{model} 一致性实验")
-    p.add_argument("--write-cl", default=default_write, help="写一致性级别 ONE/QUORUM/ALL")
-    p.add_argument("--read-cl", default=default_read, help="读一致性级别 ONE/QUORUM/ALL")
-    p.add_argument("-n", "--iterations", type=int, default=1000, help="循环次数")
+    p = argparse.ArgumentParser(description=f"{model} consistency experiment")
+    p.add_argument("--write-cl", default=default_write, help="write consistency level: ONE/TWO/THREE/QUORUM/ALL")
+    p.add_argument("--read-cl", default=default_read, help="read consistency level: ONE/TWO/THREE/QUORUM/ALL")
+    p.add_argument("-n", "--iterations", type=int, default=1000, help="number of iterations")
     p.add_argument("--scenario", default="normal",
-                   help="场景标签: normal / node_failure / partition")
+                   help="scenario label: normal / node_failure / partition")
     p.add_argument("--nodes", default="1,2,3",
-                   help="本次实验需要连接的节点, 逗号分隔 (节点故障时用 1,2)")
+                   help="nodes to connect to, comma-separated (e.g. 1,2 with a node down)")
     p.add_argument("--sleep-ms", type=float, default=0.0,
-                   help="写与读之间插入的等待毫秒数 (默认 0, 即尽快读)")
+                   help="wait between write and read in ms (default 0: read immediately)")
     p.add_argument("--skip-topology-check", action="store_true",
-                   help="跳过开跑前的拓扑自检 (不推荐; 会产生标签可能不实的数据)")
+                   help="skip the pre-run topology check (not recommended; rows may be mislabelled)")
     p.add_argument("--no-trace", action="store_true",
-                   help="不写逐次迭代的 JSONL 明细")
+                   help="do not write the per-iteration JSONL trace")
     return p
 
 
@@ -281,26 +279,26 @@ def validate(args, roles):
     errs, warns = [], []
 
     if args.iterations <= 0:
-        errs.append(f"--iterations 必须为正整数, 收到 {args.iterations}")
+        errs.append(f"--iterations must be a positive integer, got {args.iterations}")
 
     try:
         nodes = parse_nodes(args.nodes)
     except Exception:
-        errs.append(f"--nodes 无法解析: {args.nodes!r} (期望形如 1,2,3)")
+        errs.append(f"--nodes cannot be parsed: {args.nodes!r} (expected e.g. 1,2,3)")
         nodes = ()
 
     unknown = [n for n in nodes if n not in NODE_PORTS]
     if unknown:
-        errs.append(f"--nodes 含未知节点号 {unknown}, 只能是 {sorted(NODE_PORTS)}")
+        errs.append(f"--nodes has unknown node numbers {unknown}; allowed: {sorted(NODE_PORTS)}")
     if len(set(nodes)) != len(nodes):
-        errs.append(f"--nodes 有重复: {args.nodes!r}")
+        errs.append(f"--nodes has duplicates: {args.nodes!r}")
 
     # every role node must be in --nodes
     for flag, n in roles.items():
         if nodes and n not in nodes:
             errs.append(
-                f"{flag}={n} 不在 --nodes={','.join(map(str, nodes))} 之内。"
-                f"故障/分区场景下请显式指定该角色, 可选 {sorted(nodes)}")
+                f"{flag}={n} is not in --nodes={','.join(map(str, nodes))}. "
+                f"With a node down or partitioned, set this role explicitly; choose from {sorted(nodes)}")
 
     # consistency level names
     cl_flags = [("--write-cl", args.write_cl), ("--read-cl", args.read_cl)]
@@ -309,7 +307,7 @@ def validate(args, roles):
             cl_flags.append((f"--{name.replace('_', '-')}", getattr(args, name)))
     for flag, val in cl_flags:
         if str(val).strip().upper() not in CL_BY_NAME:
-            errs.append(f"{flag}={val!r} 不是合法一致性级别, 可选 {list(CL_BY_NAME)}")
+            errs.append(f"{flag}={val!r} is not a valid consistency level; choose from {list(CL_BY_NAME)}")
 
     # With fewer than 3 nodes, ALL cannot succeed: an error for the setup/verify
     # CLs (every iteration would be void), only a warning for the tested W/R CLs.
@@ -318,20 +316,20 @@ def validate(args, roles):
                            ("seed_cl", "--seed-cl")):
             if hasattr(args, name) and str(getattr(args, name)).upper() == "ALL":
                 errs.append(
-                    f"{flag}=ALL 但只连接了 {len(nodes)} 个节点。"
-                    f"{flag} 是实验装置而非自变量, 不可用会让整轮迭代全部作废。"
-                    f"故障/分区场景请改用 {flag} QUORUM。")
+                    f"{flag}=ALL but only {len(nodes)} nodes are connected. "
+                    f"{flag} is test setup, not a variable, and would void every iteration. "
+                    f"Use {flag} QUORUM for node-failure or partition runs.")
         for flag, val in (("--write-cl", args.write_cl), ("--read-cl", args.read_cl)):
             if str(val).upper() == "ALL":
                 warns.append(
-                    f"{flag}=ALL 且只连接了 {len(nodes)} 个节点 —— "
-                    "预期会持续抛 Unavailable。这本身就是要记录的数据, 继续执行。")
+                    f"{flag}=ALL with only {len(nodes)} nodes connected: "
+                    "expect Unavailable errors, which are recorded as results. Continuing.")
 
     for w in warns:
-        print(f"  [告警] {w}")
+        print(f"  [warning] {w}")
     if errs:
         print()
-        print("  [参数校验] 以下参数不合法, 已中止:")
+        print("  [argument check] invalid arguments, stopping:")
         for e in errs:
             print(f"      ! {e}")
         print()
@@ -363,7 +361,7 @@ class TraceWriter:
         if self.fh is not None:
             self.fh.close()
             self.fh = None
-            print(f"  逐次明细 -> {os.path.relpath(self.path)}")
+            print(f"  trace -> {os.path.relpath(self.path)}")
 
 
 def parse_nodes(s):
