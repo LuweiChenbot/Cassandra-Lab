@@ -54,8 +54,7 @@ for r in rows:
     if int(r.get("errors") or 0) > 0:
         errors_seen[key] = errors_seen.get(key, 0) + int(r["errors"])
 
-# 与下面的去重逻辑保持一致: 取最后一条扫描行的迭代数。
-# 取第一条会在重跑后显示旧的(更小的)n, 与曲线实际依据的数据不符。
+# n in the title comes from the last sweep row, matching the last-run-wins rule
 _sweep_rows = [r for r in rows if is_sweep_row(r)]
 N_ITER = _sweep_rows[-1]["iterations"] if _sweep_rows else "?"
 
